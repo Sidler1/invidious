@@ -657,6 +657,9 @@ module YoutubeAPI
         companion_base_url = wrapper.companion.private_url.path
 
         wrapper.client.post("#{companion_base_url}#{endpoint}", headers: headers, body: data.to_json) do |response|
+          if response.status_code != 200
+            raise InfoException.new("Invidious companion returned unexpected status code #{response.status_code}")
+          end
           response_body = JSON.parse(response.body_io).as_h
         end
       end

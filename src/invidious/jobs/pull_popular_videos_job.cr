@@ -7,11 +7,15 @@ class Invidious::Jobs::PullPopularVideosJob < Invidious::Jobs::BaseJob
 
   def begin
     loop do
-      videos = Invidious::Database::ChannelVideos.select_popular_videos
-        .sort_by!(&.published)
-        .reverse!
+      begin
+        videos = Invidious::Database::ChannelVideos.select_popular_videos
+          .sort_by!(&.published)
+          .reverse!
 
-      POPULAR_VIDEOS.set(videos)
+        POPULAR_VIDEOS.set(videos)
+      rescue ex
+        LOGGER.error("PullPopularVideosJob: #{ex.message}")
+      end
 
       sleep 1.minute
       Fiber.yield

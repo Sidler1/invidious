@@ -6,7 +6,7 @@ struct VideoNotification
   def_hash @channel_id, @video_id
 
   def ==(other)
-    video_id == other.video_id
+    channel_id == other.channel_id && video_id == other.video_id
   end
 
   def self.from_video(video : ChannelVideo) : self
@@ -44,12 +44,14 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
 
     # fiber to locally cache all incoming notifications (from pubsub webhooks and refresh channels job)
     spawn do
-      begin
-        loop do
+      loop do
+        begin
           notification = notification_channel.receive
           notify_mutex.synchronize do
             to_notify[notification.channel_id] << notification
           end
+        rescue ex
+          LOGGER.error("NotificationJob: #{ex.message}")
         end
       end
     end

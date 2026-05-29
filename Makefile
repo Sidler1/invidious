@@ -86,7 +86,7 @@ verify:
 # -----------------------
 
 clean:
-	rm invidious
+	rm -f invidious
 
 distclean: clean
 	rm -rf libs
@@ -124,5 +124,5 @@ help:
 
 
 # No targets generates an output named after themselves
-.PHONY: all get-libs build amd64 run
+.PHONY: all get-libs invidious run
 .PHONY: format test verify clean distclean help

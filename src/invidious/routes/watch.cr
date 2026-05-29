@@ -300,9 +300,12 @@ module Invidious::Routes::Watch
       return error_template(400, "Missing form data")
     end
 
-    download_widget = JSON.parse(selection)
-
-    extension = download_widget["ext"].as_s
+    begin
+      download_widget = JSON.parse(selection)
+      extension = download_widget["ext"].as_s
+    rescue
+      return error_template(400, "Invalid form data")
+    end
     filename = "#{title}-#{video_id}.#{extension}"
 
     # Delete the now useless URL parameters

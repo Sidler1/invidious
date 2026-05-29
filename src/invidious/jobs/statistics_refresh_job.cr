@@ -36,7 +36,11 @@ class Invidious::Jobs::StatisticsRefreshJob < Invidious::Jobs::BaseJob
     load_initial_stats
 
     loop do
-      refresh_stats
+      begin
+        refresh_stats
+      rescue ex
+        LOGGER.error("StatisticsRefreshJob: #{ex.message}")
+      end
       sleep 10.minute
       Fiber.yield
     end

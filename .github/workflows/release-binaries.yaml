@@ -48,17 +48,25 @@ jobs:
           cp config/config.example.yml dist/config/
           cp invidious.service dist/
           tar -czf invidious-x86_64-unknown-linux-gnu.tar.gz -C dist .
+          # Publish a checksum so update.sh can verify integrity before extracting.
+          sha256sum invidious-x86_64-unknown-linux-gnu.tar.gz > invidious-x86_64-unknown-linux-gnu.tar.gz.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: invidious-x86_64-unknown-linux-gnu
-          path: invidious-x86_64-unknown-linux-gnu.tar.gz
+          path: |
+            invidious-x86_64-unknown-linux-gnu.tar.gz
+            invidious-x86_64-unknown-linux-gnu.tar.gz.sha256
           retention-days: 90
 
   release:
     runs-on: ubuntu-latest
     needs: build
+    # Only publish the rolling release from master. A workflow_dispatch on
+    # another branch would otherwise create an orphan release-<branch> tag that
+    # update.sh (pinned to release-master) can never consume.
+    if: github.ref_name == 'master'
     permissions:
       contents: write
     steps:

@@ -65,7 +65,7 @@ module Invidious::Database
     struct_array.each_with_index do |name, i|
       if name != column_array[i]?
         if !column_array[i]?
-          new_column = column_types.select(&.starts_with?(name))[0]
+          new_column = column_types.select(&.starts_with?("#{name} "))[0]
           LOGGER.info("check_table: ALTER TABLE #{table_name} ADD COLUMN #{new_column}")
           PG_DB.exec("ALTER TABLE #{table_name} ADD COLUMN #{new_column}")
           next
@@ -73,14 +73,14 @@ module Invidious::Database
 
         # Column doesn't exist
         if !column_array.includes? name
-          new_column = column_types.select(&.starts_with?(name))[0]
+          new_column = column_types.select(&.starts_with?("#{name} "))[0]
           PG_DB.exec("ALTER TABLE #{table_name} ADD COLUMN #{new_column}")
         end
 
         # Column exists but in the wrong position, rotate
         if struct_array.includes? column_array[i]
           until name == column_array[i]
-            new_column = column_types.select(&.starts_with?(column_array[i]))[0]?.try &.gsub("#{column_array[i]}", "#{column_array[i]}_new")
+            new_column = column_types.select(&.starts_with?("#{column_array[i]} "))[0]?.try &.gsub("#{column_array[i]}", "#{column_array[i]}_new")
 
             # There's a column we didn't expect
             if !new_column

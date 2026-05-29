@@ -11,6 +11,8 @@
 #
 # Output: ./invidious (static binary) and a populated ./assets/ directory.
 set -eux
+# Fail a pipeline if any stage fails (e.g. the `... | sha256sum -c` check below).
+set -o pipefail
 
 OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.2}"
 OPENSSL_SHA256="${OPENSSL_SHA256:-aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f}"

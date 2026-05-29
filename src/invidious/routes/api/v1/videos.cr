@@ -260,7 +260,7 @@ module Invidious::Routes::API::V1::Videos
     source = env.params.query["source"]?
     source ||= "archive"
 
-    if !id.match(/[a-zA-Z0-9_-]{11}/)
+    if !id.match(/\A[a-zA-Z0-9_-]{11}\z/)
       haltf env, 400
     end
 

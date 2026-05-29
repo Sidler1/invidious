@@ -211,12 +211,12 @@ module Invidious::Routes::API::V1::Authenticated
     env.response.content_type = "application/json"
     user = env.get("user").as(User)
 
-    title = env.params.json["title"]?.try &.as(String).delete("<>").byte_slice(0, 150)
+    title = env.params.json["title"]?.as?(String).try &.delete("<>").byte_slice(0, 150)
     if !title
       return error_json(400, "Invalid title.")
     end
 
-    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse?(p.as(String).downcase) }
+    privacy = env.params.json["privacy"]?.as?(String).try { |p| PlaylistPrivacy.parse?(p.downcase) }
     if !privacy
       return error_json(400, "Invalid privacy setting.")
     end
@@ -252,9 +252,9 @@ module Invidious::Routes::API::V1::Authenticated
       return error_json(403, "Invalid user")
     end
 
-    title = env.params.json["title"]?.try &.as(String).delete("<>").byte_slice(0, 150) || playlist.title
-    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse?(p.as(String).downcase) } || playlist.privacy
-    description = env.params.json["description"]?.try &.as(String).delete("\r") || playlist.description
+    title = env.params.json["title"]?.as?(String).try &.delete("<>").byte_slice(0, 150) || playlist.title
+    privacy = env.params.json["privacy"]?.as?(String).try { |p| PlaylistPrivacy.parse?(p.downcase) } || playlist.privacy
+    description = env.params.json["description"]?.as?(String).try &.delete("\r") || playlist.description
 
     if title != playlist.title ||
        privacy != playlist.privacy ||
@@ -308,7 +308,7 @@ module Invidious::Routes::API::V1::Authenticated
       return error_json(400, "Playlist cannot have more than #{CONFIG.playlist_length_limit} videos")
     end
 
-    video_id = env.params.json["videoId"].try &.as(String)
+    video_id = env.params.json["videoId"]?.as?(String)
     if !video_id
       return error_json(403, "Invalid videoId")
     end
@@ -407,9 +407,9 @@ module Invidious::Routes::API::V1::Authenticated
       callback_url = env.params.body["callbackUrl"]?
       expire = env.params.body["expire"]?.try &.to_i?
     when "application/json"
-      scopes = env.params.json["scopes"].as(Array).map(&.as_s)
-      callback_url = env.params.json["callbackUrl"]?.try &.as(String)
-      expire = env.params.json["expire"]?.try &.as(Int64)
+      scopes = env.params.json["scopes"]?.as?(Array(JSON::Any)).try(&.compact_map(&.as_s?)) || [] of String
+      callback_url = env.params.json["callbackUrl"]?.as?(String)
+      expire = env.params.json["expire"]?.as?(Int64)
     else
       return error_json(400, "Invalid or missing header 'Content-Type'")
     end

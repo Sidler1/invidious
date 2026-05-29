@@ -34,7 +34,7 @@ module Invidious::Database::Videos
   def update(video : Video)
     request = <<-SQL
       UPDATE videos
-      SET (id, info, updated) = ($1, $2, $3)
+      SET info = $2, updated = $3
       WHERE id = $1
     SQL
 

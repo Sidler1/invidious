@@ -16,12 +16,12 @@ abstract class Invidious::Database::Migration
 
   abstract def up(conn : DB::Connection)
 
-  def migrate
+  def migrate(conn : DB::Connection)
     # migrator already ignores completed migrations
     # but this is an extra check to make sure a migration doesn't run twice
     return if completed?
 
-    @db.transaction do |txn|
+    conn.transaction do |txn|
       up(txn.connection)
       track(txn.connection)
       @completed = true

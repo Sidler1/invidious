@@ -15,32 +15,36 @@ class Invidious::Jobs::SubscribeToFeedsJob < Invidious::Jobs::BaseJob
     active_channel = ::Channel(Bool).new
 
     loop do
-      db.query_all("SELECT id FROM channels WHERE CURRENT_TIMESTAMP - subscribed > interval '4 days' OR subscribed IS NULL") do |rs|
-        rs.each do
-          ucid = rs.read(String)
+      begin
+        db.query_all("SELECT id FROM channels WHERE CURRENT_TIMESTAMP - subscribed > interval '4 days' OR subscribed IS NULL") do |rs|
+          rs.each do
+            ucid = rs.read(String)
 
-          if active_fibers >= max_fibers.as(Int32)
-            if active_channel.receive
-              active_fibers -= 1
-            end
-          end
-
-          active_fibers += 1
-
-          spawn do
-            begin
-              response = subscribe_pubsub(ucid, hmac_key)
-
-              if response.status_code >= 400
-                LOGGER.error("SubscribeToFeedsJob: #{ucid} : #{response.body}")
+            if active_fibers >= max_fibers.as(Int32)
+              if active_channel.receive
+                active_fibers -= 1
               end
-            rescue ex
-              LOGGER.error("SubscribeToFeedsJob: #{ucid} : #{ex.message}")
             end
 
-            active_channel.send(true)
+            active_fibers += 1
+
+            spawn do
+              begin
+                response = subscribe_pubsub(ucid, hmac_key)
+
+                if response.status_code >= 400
+                  LOGGER.error("SubscribeToFeedsJob: #{ucid} : #{response.body}")
+                end
+              rescue ex
+                LOGGER.error("SubscribeToFeedsJob: #{ucid} : #{ex.message}")
+              end
+
+              active_channel.send(true)
+            end
           end
         end
+      rescue ex
+        LOGGER.error("SubscribeToFeedsJob: #{ex.message}")
       end
 
       sleep 1.minute

@@ -232,6 +232,7 @@ module Invidious::Routes::VideoPlayback
 
     raw_params = {} of String => Array(String)
     path.each_slice(2) do |pair|
+      next if pair.size < 2
       key, value = pair
       value = URI.decode_www_form(value)
 
