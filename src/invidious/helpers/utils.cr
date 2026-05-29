@@ -87,7 +87,7 @@ def decode_time(string)
     millis = /(?<millis>\d+)ms/.match(string).try &.["millis"].try &.to_f
     millis ||= 0
 
-    time = hours * 3600 + minutes * 60 + seconds + millis // 1000
+    time = hours * 3600 + minutes * 60 + seconds + millis / 1000
   end
 
   return time
@@ -386,21 +386,54 @@ def parse_link_endpoint(endpoint : JSON::Any, text : String, video_id : String)
   return text
 end
 
-def encrypt_ecb_without_salt(data, key)
-  cipher = OpenSSL::Cipher.new("aes-128-ecb")
-  cipher.encrypt
-  cipher.key = key
+# Crystal's `OpenSSL::Cipher` does not expose the AES-GCM authentication tag,
+# so we bind `EVP_CIPHER_CTX_ctrl` and read it from the cipher context. This is
+# required to produce a `check` token the Invidious companion can verify.
+lib LibCrypto
+  fun evp_cipher_ctx_ctrl = EVP_CIPHER_CTX_ctrl(ctx : EVP_CIPHER_CTX, type : Int32, arg : Int32, ptr : Void*) : Int32
+end
 
-  io = IO::Memory.new
-  io.write(cipher.update(data))
-  io.write(cipher.final)
-  io.rewind
-
-  return io
+class OpenSSL::Cipher
+  # Returns the GCM authentication tag. Only valid after `#final` in encrypt mode.
+  def auth_tag(size : Int32 = 16) : Bytes
+    buffer = Bytes.new(size)
+    # 0x10 == EVP_CTRL_GCM_GET_TAG (alias EVP_CTRL_AEAD_GET_TAG)
+    if LibCrypto.evp_cipher_ctx_ctrl(@ctx, 0x10, size, buffer.to_unsafe.as(Void*)) != 1
+      raise OpenSSL::Cipher::Error.new("Unable to read GCM authentication tag")
+    end
+    buffer
+  end
 end
 
 def invidious_companion_encrypt(data)
   timestamp = Time.utc.to_unix
-  encrypted_data = encrypt_ecb_without_salt("#{timestamp}|#{data}", CONFIG.invidious_companion_key)
-  return Base64.urlsafe_encode(encrypted_data)
+  plaintext = "#{timestamp}|#{data}"
+
+  # The Invidious companion expects the `check` token to be AES-256-GCM
+  # (see its `verifyRequest`/`encryptQuery`). The shared 16-char secret is
+  # stretched to a 256-bit key via SHA-256 on both sides, and the output
+  # layout is: base64url( IV[12] || ciphertext || authTag[16] ) — the auth
+  # tag is appended to the ciphertext, matching the Web Crypto API the
+  # companion uses. This must stay byte-for-byte compatible with
+  # ../invidious-companion/src/lib/helpers/{encryptQuery,verifyRequest}.ts
+  key = OpenSSL::Digest.new("SHA256").update(CONFIG.invidious_companion_key).final
+
+  cipher = OpenSSL::Cipher.new("aes-256-gcm")
+  cipher.encrypt
+  cipher.key = key
+
+  # 96-bit random IV, per NIST recommendation for GCM (matches the companion).
+  iv = Random::Secure.random_bytes(12)
+  cipher.iv = iv
+
+  encrypted = IO::Memory.new
+  encrypted.write(cipher.update(plaintext))
+  encrypted.write(cipher.final)
+
+  io = IO::Memory.new
+  io.write(iv)
+  io.write(encrypted.to_slice)
+  io.write(cipher.auth_tag)
+
+  return Base64.urlsafe_encode(io.to_slice)
 end

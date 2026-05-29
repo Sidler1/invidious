@@ -48,7 +48,7 @@ module Helpers
     body = XML.parse(annotations)
     nodeset = body.xpath_nodes(%q(/document/annotations/annotation))
 
-    return if nodeset == 0
+    return if nodeset.size == 0
 
     has_legacy_annotations = false
     nodeset.each do |node|

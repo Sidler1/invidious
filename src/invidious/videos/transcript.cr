@@ -66,7 +66,10 @@ module Invidious::Videos
       )
 
       if footer_language_menu
-        label = footer_language_menu.as_a.select(&.["selected"].as_bool)[0]["title"].as_s
+        # Find the menu entry marked as selected; fall back to the requested
+        # language code if none is flagged (or the "selected" key is absent).
+        selected = footer_language_menu.as_a.find { |item| item["selected"]?.try(&.as_bool) }
+        label = selected.try &.["title"]?.try(&.as_s) || language_code
       else
         label = language_code
       end

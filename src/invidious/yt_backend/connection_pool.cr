@@ -21,8 +21,13 @@ struct YoutubeConnectionPool
     begin
       response = yield conn
     rescue ex
+      # The checked-out connection is likely broken; drop it from the pool
+      # and retry once with a fresh, pool-managed connection.
       conn.close
-      conn = make_client(url, force_resolve: true)
+      pool.delete(conn)
+
+      conn = pool.checkout
+      conn.proxy = make_configured_http_proxy_client() if CONFIG.http_proxy
 
       response = yield conn
     ensure
@@ -78,7 +83,6 @@ struct CompanionConnectionPool
 
     @pool = DB::Pool(CompanionWrapper).new(options) do
       companion = CONFIG.invidious_companion.sample
-      make_client(companion.private_url, use_http_proxy: false)
       CompanionWrapper.new(companion: companion)
     end
   end
@@ -90,10 +94,9 @@ struct CompanionConnectionPool
       response = yield wrapper
     rescue ex
       wrapper.close
+      pool.delete(wrapper)
 
-      companion = CONFIG.invidious_companion.sample
-      make_client(companion.private_url, use_http_proxy: false)
-      wrapper = CompanionWrapper.new(companion: companion)
+      wrapper = pool.checkout
 
       response = yield wrapper
     ensure

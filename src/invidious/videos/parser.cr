@@ -44,8 +44,13 @@ module Invidious::Videos::Parser
     # TODO: when refactoring video types, make a struct for related videos
     # or reuse an existing type, if that fits.
     return {
-      "id"               => related["videoId"],
-      "title"            => related["title"]["simpleText"],
+      "id" => related["videoId"],
+      # `title` may be a `simpleText` (compact renderer) or a `runs` array
+      # (end-screen renderer), or missing entirely — guard all three.
+      "title" => JSON::Any.new(
+        related.dig?("title", "simpleText").try(&.as_s) ||
+        related.dig?("title", "runs", 0, "text").try(&.as_s) || ""
+      ),
       "author"           => author || JSON::Any.new(""),
       "ucid"             => JSON::Any.new(ucid || ""),
       "length_seconds"   => JSON::Any.new(length || "0"),
@@ -68,7 +73,7 @@ module Invidious::Videos::Parser
     if playability_status != "OK"
       subreason = player_response.dig?("playabilityStatus", "errorScreen", "playerErrorMessageRenderer", "subreason")
       reason = subreason.try &.[]?("simpleText").try &.as_s
-      reason ||= subreason.try &.[]("runs").as_a.map(&.[]("text")).join("")
+      reason ||= subreason.try &.[]?("runs").try &.as_a.map(&.["text"]).join("")
       reason ||= player_response.dig("playabilityStatus", "reason").as_s
 
       # Stop here if video is not a scheduled livestream or

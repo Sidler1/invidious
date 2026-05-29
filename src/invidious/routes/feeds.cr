@@ -365,10 +365,14 @@ module Invidious::Routes::Feeds
 
     case verify_token
     when .starts_with? "v1"
-      _, time, nonce, signature = verify_token.split(":")
+      parts = verify_token.split(":")
+      haltf env, status_code: 400 if parts.size < 4
+      _, time, nonce, signature = parts
       data = "#{time}:#{nonce}"
     when .starts_with? "v2"
-      time, signature = verify_token.split(":")
+      parts = verify_token.split(":")
+      haltf env, status_code: 400 if parts.size < 2
+      time, signature = parts
       data = "#{time}"
     else
       haltf env, status_code: 400
@@ -376,7 +380,8 @@ module Invidious::Routes::Feeds
 
     # The hub will sometimes check if we're still subscribed after delivery errors,
     # so we reply with a 200 as long as the request hasn't expired
-    if Time.utc.to_unix - time.to_i > 432000
+    time_unix = time.to_i?
+    if time_unix.nil? || Time.utc.to_unix - time_unix > 432000
       haltf env, status_code: 400
     end
 

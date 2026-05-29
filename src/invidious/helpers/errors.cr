@@ -55,7 +55,11 @@ def error_template_helper(env : HTTP::Server::Context, status_code : Int32, exce
   url_search_issues += "?q=is:issue+is:open+"
   url_search_issues += URI.encode_www_form("[Bug] #{issue_title}")
 
-  url_switch = "https://redirect.invidious.io" + env.request.resource
+  # `env.request.resource` is the raw, un-encoded request target and is
+  # reflected into `href` attributes below, so it must be HTML-escaped to
+  # avoid a reflected XSS on the crash page (see also `get_issue_template`).
+  safe_resource = HTML.escape(env.request.resource)
+  url_switch = "https://redirect.invidious.io" + safe_resource
 
   url_new_issue = "https://github.com/iv-org/invidious/issues/new"
   url_new_issue += "?labels=bug&template=bug_report.md&title="
@@ -68,7 +72,7 @@ def error_template_helper(env : HTTP::Server::Context, status_code : Int32, exce
 
       <p><b>#{I18n.translate(locale, "crash_page_before_reporting")}</b></p>
       <ul>
-        <li>#{I18n.translate(locale, "crash_page_refresh", env.request.resource)}</li>
+        <li>#{I18n.translate(locale, "crash_page_refresh", safe_resource)}</li>
         <li>#{I18n.translate(locale, "crash_page_switch_instance", url_switch)}</li>
         <li>#{I18n.translate(locale, "crash_page_read_the_faq", url_faq)}</li>
         <li>#{I18n.translate(locale, "crash_page_search_issue", url_search_issues)}</li>

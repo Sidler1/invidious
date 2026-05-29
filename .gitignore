@@ -4,6 +4,9 @@
 /bin/
 /.shards/
 /.vscode/
+/.idea/
+/.claude/
 /invidious
 /sentry
 /config/config.yml
+CLAUDE.md

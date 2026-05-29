@@ -100,7 +100,7 @@ module Invidious::Routes::Search
     if page.nil?
       page = 1
     else
-      page = Math.max(1, page.to_i)
+      page = Math.max(1, page.to_i? || 1)
       env.params.query.delete_all("page")
     end
 

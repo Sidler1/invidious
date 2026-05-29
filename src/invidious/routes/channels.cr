@@ -228,7 +228,7 @@ module Invidious::Routes::Channels
 
     # redirect to post page
     if lb = env.params.query["lb"]?
-      env.redirect "/post/#{URI.encode_www_form(lb)}?ucid=#{URI.encode_www_form(ucid)}"
+      return env.redirect "/post/#{URI.encode_www_form(lb)}?ucid=#{URI.encode_www_form(ucid)}"
     end
 
     preferences = env.get("preferences").as(Preferences)
@@ -238,7 +238,7 @@ module Invidious::Routes::Channels
 
     continuation = env.params.query["continuation"]?
 
-    if !channel.tabs.includes? "community" && "posts"
+    if !channel.tabs.includes?("community")
       return env.redirect "/channel/#{channel.ucid}"
     end
 

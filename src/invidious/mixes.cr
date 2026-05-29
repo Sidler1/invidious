@@ -37,8 +37,13 @@ def fetch_mix(rdid, video_id, cookies = nil, locale = nil)
   mix_title = playlist["title"].as_s
 
   contents = playlist["contents"].as_a
-  if contents.map { |video| video["playlistPanelVideoRenderer"]["videoId"] }.includes? video_id
-    until contents[0]["playlistPanelVideoRenderer"]["videoId"].as_s == video_id
+
+  # A mix can include non-video entries (e.g. automixPreviewVideoRenderer);
+  # keep only real video items so the indexing below is always safe.
+  contents.select! { |item| item["playlistPanelVideoRenderer"]? }
+
+  if contents.any? { |video| video.dig?("playlistPanelVideoRenderer", "videoId").try(&.as_s) == video_id }
+    until contents.empty? || contents[0]["playlistPanelVideoRenderer"]["videoId"].as_s == video_id
       contents.shift
     end
   end
@@ -67,7 +72,7 @@ def fetch_mix(rdid, video_id, cookies = nil, locale = nil)
     })
   end
 
-  if !cookies
+  if !cookies && !videos.empty?
     next_page = fetch_mix(rdid, videos[-1].id, response.cookies, locale)
     videos += next_page.videos
   end

@@ -106,8 +106,11 @@ module Invidious::Frontend::Pagination
       str << %(<div class="page-next-container flex-right">)
 
       if !ctoken.nil?
-        params["continuation"] = ctoken
-        url_next = HttpServer::Utils.add_params_to_url(base_url, params)
+        # Work on an independent copy so we don't mutate the caller's
+        # params (e.g. the shared `env.params.query`).
+        next_params = URI::Params.parse(params.to_s)
+        next_params["continuation"] = ctoken
+        url_next = HttpServer::Utils.add_params_to_url(base_url, next_params)
 
         self.next_page(str, locale, url_next.to_s)
       end

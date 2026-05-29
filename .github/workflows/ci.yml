@@ -74,15 +74,22 @@ jobs:
 
       - name: Install Shards
         run: |
+          # --skip-postinstall avoids building ameba here (the build job only
+          # runs specs + compiles Invidious; linting is the separate `lint`
+          # job). This keeps the non-blocking nightly entry from breaking when
+          # ameba can't compile against an unreleased Crystal.
           if ! shards check; then
-            shards install
+            shards install --skip-postinstall
           fi
 
       - name: Run tests
         run: crystal spec
 
       - name: Build
-        run: crystal build --warnings all --error-on-warnings --stats --time --progress --error-trace src/invidious.cr
+        # Enforce --error-on-warnings only on stable Crystal. Nightly regularly
+        # introduces new deprecation warnings in stdlib/our deps that we can't
+        # control; the non-blocking nightly entry shouldn't fail on those.
+        run: crystal build --warnings all ${{ matrix.stable && '--error-on-warnings' || '' }} --stats --time --progress --error-trace src/invidious.cr
 
   build-docker:
     strategy:

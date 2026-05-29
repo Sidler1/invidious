@@ -64,7 +64,9 @@ module Invidious::Videos
 
             duration = node["d"]?.try &.to_f.milliseconds
 
-            duration ||= start_time
+            # Fall back to a small fixed duration when the cue has no
+            # explicit length, so the (last) cue stays visible for a moment.
+            duration ||= 5.seconds
 
             if cues.size > i + 1
               end_time = cues[i + 1]["t"].to_f.milliseconds

@@ -327,12 +327,14 @@ struct ProblematicTimelineItem
       xml.element("content", type: "xhtml") do
         xml.element("div", xmlns: "http://www.w3.org/1999/xhtml") do
           xml.element("div") do
-            xml.element("h4") { I18n.translate(locale, "timeline_parse_error_placeholder_heading") }
-            xml.element("p") { I18n.translate(locale, "timeline_parse_error_placeholder_message") }
+            xml.element("h4") { xml.text I18n.translate(locale, "timeline_parse_error_placeholder_heading") }
+            xml.element("p") { xml.text I18n.translate(locale, "timeline_parse_error_placeholder_message") }
           end
 
           xml.element("pre") do
-            get_issue_template(env, @parse_exception)
+            # get_issue_template returns {issue_title, issue_template}; emit the body.
+            issue_template_components = get_issue_template(env, @parse_exception)
+            xml.text issue_template_components[1]
           end
         end
       end
