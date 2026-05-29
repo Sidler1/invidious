@@ -74,8 +74,12 @@ jobs:
 
       - name: Install Shards
         run: |
+          # --skip-postinstall avoids building ameba here (the build job only
+          # runs specs + compiles Invidious; linting is the separate `lint`
+          # job). This keeps the non-blocking nightly entry from breaking when
+          # ameba can't compile against an unreleased Crystal.
           if ! shards check; then
-            shards install
+            shards install --skip-postinstall
           fi
 
       - name: Run tests
