@@ -97,7 +97,9 @@ module Invidious::Frontend::WatchPage
       video_assets.captions.each do |caption|
         value = {"label": caption.name, "ext": "#{caption.language_code}.vtt"}.to_json
 
-        str << "\t\t\t<option value='" << value << "'>"
+        # `caption.name` is YouTube-sourced and may contain a single quote,
+        # which would break out of the single-quoted attribute; escape it.
+        str << "\t\t\t<option value='" << HTML.escape(value) << "'>"
         str << I18n.translate(locale, "download_subtitles", I18n.translate(locale, caption.name))
         str << "</option>\n"
       end

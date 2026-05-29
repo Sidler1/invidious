@@ -192,8 +192,8 @@ module Invidious::Routes::API::V1::Videos
       haltf env, 500
     end
 
-    width = env.params.query["width"]?.try &.to_i
-    height = env.params.query["height"]?.try &.to_i
+    width = env.params.query["width"]?.try &.to_i?
+    height = env.params.query["height"]?.try &.to_i?
 
     if !width && !height
       response = JSON.build do |json|
@@ -285,7 +285,7 @@ module Invidious::Routes::API::V1::Videos
         location = make_client(INTERNET_ARCHIVE_URL, &.get("/download/youtubeannotations_#{index}/#{id[0, 2]}.tar/#{file}"))
 
         if !location.headers["Location"]?
-          env.response.status_code = location.status_code
+          haltf env, location.status_code
         end
 
         response = make_client(URI.parse(location.headers["Location"]), &.get(location.headers["Location"]))
@@ -387,6 +387,8 @@ module Invidious::Routes::API::V1::Videos
 
         return response.to_json
       end
+    else
+      return error_json(400, "Invalid source.")
     end
   end
 

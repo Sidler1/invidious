@@ -216,7 +216,7 @@ module Invidious::Routes::API::V1::Authenticated
       return error_json(400, "Invalid title.")
     end
 
-    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse(p.as(String).downcase) }
+    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse?(p.as(String).downcase) }
     if !privacy
       return error_json(400, "Invalid privacy setting.")
     end
@@ -252,8 +252,8 @@ module Invidious::Routes::API::V1::Authenticated
       return error_json(403, "Invalid user")
     end
 
-    title = env.params.json["title"].try &.as(String).delete("<>").byte_slice(0, 150) || playlist.title
-    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse(p.as(String).downcase) } || playlist.privacy
+    title = env.params.json["title"]?.try &.as(String).delete("<>").byte_slice(0, 150) || playlist.title
+    privacy = env.params.json["privacy"]?.try { |p| PlaylistPrivacy.parse?(p.as(String).downcase) } || playlist.privacy
     description = env.params.json["description"]?.try &.as(String).delete("\r") || playlist.description
 
     if title != playlist.title ||
@@ -349,7 +349,10 @@ module Invidious::Routes::API::V1::Authenticated
     user = env.get("user").as(User)
 
     plid = env.params.url["plid"]
-    index = env.params.url["index"].to_i64(16)
+    index = env.params.url["index"].to_i64?(16)
+    if index.nil?
+      return error_json(400, "Invalid index.")
+    end
 
     playlist = Invidious::Database::Playlists.select(id: plid)
     if !playlist || playlist.author != user.email && playlist.privacy.private?

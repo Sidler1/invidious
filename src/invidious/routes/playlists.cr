@@ -65,7 +65,11 @@ module Invidious::Routes::Playlists
 
     user = user.as(User)
 
-    playlist_id = env.params.query["list"]
+    playlist_id = env.params.query["list"]?
+    if playlist_id.nil? || playlist_id.empty?
+      return error_template(400, "A playlist ID is required")
+    end
+
     begin
       playlist = get_playlist(playlist_id)
     rescue ex : NotFoundException
@@ -208,7 +212,7 @@ module Invidious::Routes::Playlists
     end
 
     title = env.params.body["title"]?.try &.delete("<>") || ""
-    privacy = PlaylistPrivacy.parse(env.params.body["privacy"]? || "Public")
+    privacy = PlaylistPrivacy.parse?(env.params.body["privacy"]? || "Public") || playlist.privacy
     description = env.params.body["description"]?.try &.delete("\r") || ""
 
     if title != playlist.title ||
@@ -328,7 +332,14 @@ module Invidious::Routes::Playlists
         end
       end
 
-      video_id = env.params.query["video_id"]
+      video_id = env.params.query["video_id"]?
+      if video_id.nil? || video_id.empty?
+        if redirect
+          return error_template(400, "Missing \"video_id\" parameter.")
+        else
+          return error_json(400, "Missing \"video_id\" parameter.")
+        end
+      end
 
       begin
         video = get_video(video_id)
@@ -357,7 +368,14 @@ module Invidious::Routes::Playlists
       Invidious::Database::PlaylistVideos.insert(playlist_video)
       Invidious::Database::Playlists.update_video_added(playlist_id, playlist_video.index)
     when "remove_video"
-      index = env.params.query["set_video_id"]
+      index = env.params.query["set_video_id"]?
+      if index.nil? || index.empty?
+        if redirect
+          return error_template(400, "Missing \"set_video_id\" parameter.")
+        else
+          return error_json(400, "Missing \"set_video_id\" parameter.")
+        end
+      end
       Invidious::Database::PlaylistVideos.delete(index)
       Invidious::Database::Playlists.update_video_removed(playlist_id, index)
     when "move_video_before"

@@ -81,7 +81,7 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
                     "videoId"   => n.video_id,
                     "published" => n.published.to_unix,
                   }.to_json
-                  conn.exec("NOTIFY notifications, E'#{payload}'")
+                  conn.exec("SELECT pg_notify('notifications', $1)", payload)
                 end
               end
             else

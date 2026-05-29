@@ -157,7 +157,7 @@ module Invidious::Database::Playlists
       WHERE id = $1
     SQL
 
-    return PG_DB.query_one?(request, id, as: String).nil?
+    return !PG_DB.query_one?(request, id, as: String).nil?
   end
 
   # Count how many playlist a user has created.

@@ -57,7 +57,7 @@ def fetch_channel_community_post(ucid, post_id, locale, format, thin_mode)
 end
 
 def extract_channel_community(items, *, ucid, locale, format, thin_mode, is_single_post : Bool = false)
-  if message = items[0]["messageRenderer"]?
+  if message = items[0]?.try &.["messageRenderer"]?
     error_message = (message["text"]["simpleText"]? ||
                      message["text"]["runs"]?.try &.[0]?.try &.["text"]?)
       .try &.as_s || ""
@@ -86,14 +86,14 @@ def extract_channel_community(items, *, ucid, locale, format, thin_mode, is_sing
             next if !post
 
             content_html = post["contentText"]?.try { |t| parse_content(t) } || ""
-            author = post["authorText"]["runs"]?.try &.[0]?.try &.["text"]? || ""
+            author = post.dig?("authorText", "runs").try &.[0]?.try &.["text"]? || ""
 
             json.object do
               json.field "author", author
               json.field "authorThumbnails" do
                 json.array do
                   qualities = {32, 48, 76, 100, 176, 512}
-                  author_thumbnail = post["authorThumbnail"]["thumbnails"].as_a[0]["url"].as_s
+                  author_thumbnail = post.dig?("authorThumbnail", "thumbnails").try(&.as_a[0]["url"].as_s) || ""
 
                   qualities.each do |quality|
                     json.object do
@@ -136,7 +136,7 @@ def extract_channel_community(items, *, ucid, locale, format, thin_mode, is_sing
               json.field "likeCount", like_count
               json.field "replyCount", reply_count
               json.field "commentId", post["postId"]? || post["commentId"]? || ""
-              json.field "authorIsChannelOwner", post["authorEndpoint"]["browseEndpoint"]["browseId"] == ucid
+              json.field "authorIsChannelOwner", post.dig?("authorEndpoint", "browseEndpoint", "browseId") == ucid
 
               if attachment = post["backstageAttachment"]?
                 json.field "attachment" do

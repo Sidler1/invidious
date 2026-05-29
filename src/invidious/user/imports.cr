@@ -48,11 +48,19 @@ struct Invidious::User
 
       # Add each video to the playlist from the body content
       csv_body = CSV.new(raw_body.strip('\n'), headers: false)
+      video_count = 0
       csv_body.each do |row|
         video_id = row[0]
         if playlist
           next if !video_id
           next if video_id == "Video Id"
+
+          # Enforce the same length limit as the other import paths so a large
+          # uploaded CSV cannot create an unbounded playlist.
+          if video_count >= CONFIG.playlist_length_limit
+            raise InfoException.new("Playlist cannot have more than #{CONFIG.playlist_length_limit} videos")
+          end
+          video_count += 1
 
           begin
             video = get_video(video_id)
@@ -121,7 +129,7 @@ struct Invidious::User
           Invidious::Database::Playlists.update_description(playlist.id, description)
 
           item["videos"]?.try &.as_a?.try &.each_with_index do |video_id, idx|
-            if idx > CONFIG.playlist_length_limit
+            if idx >= CONFIG.playlist_length_limit
               raise InfoException.new("Playlist cannot have more than #{CONFIG.playlist_length_limit} videos")
             end
 

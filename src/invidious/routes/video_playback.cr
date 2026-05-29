@@ -18,8 +18,10 @@ module Invidious::Routes::VideoPlayback
     if query_params["host"]? && !query_params["host"].empty?
       host = query_params["host"]
       query_params.delete("host")
+    elsif mn = mns.pop?
+      host = "r#{fvip}---#{mn}.googlevideo.com"
     else
-      host = "r#{fvip}---#{mns.pop}.googlevideo.com"
+      return error_template(400, "Missing \"host\" or \"mn\" parameter.")
     end
 
     # Sanity check, to avoid being used as an open proxy

@@ -467,7 +467,10 @@ module Invidious::Routes::API::V1::Channels
 
     case continuation
     when nil, ""
-      ucid = env.params.query["ucid"]
+      ucid = env.params.query["ucid"]?
+      if ucid.nil? || ucid.empty?
+        return error_json(400, "Missing \"ucid\" parameter.")
+      end
       comments = Comments.fetch_community_post_comments(ucid, id, sort_by: sort_by)
     else
       comments = YoutubeAPI.browse(continuation: continuation)

@@ -84,12 +84,14 @@ class Invidious::Jobs::InstanceListRefreshJob < Invidious::Jobs::BaseJob
     remote_commit_date = Time.parse(remote_commit_date[0], "%Y.%m.%d", Time::Location::UTC)
     local_commit_date = Time.parse(CURRENT_VERSION, "%Y.%m.%d", Time::Location::UTC)
 
-    return (remote_commit_date - local_commit_date).abs.days > 30
+    # An instance is outdated only when it lags *behind* the local build by
+    # more than 30 days. A newer instance must not be treated as outdated.
+    return (local_commit_date - remote_commit_date).days > 30
   end
 
   # Checks if the uptime of the target instance is greater than 90% over a 30 day period
   private def bad_uptime?(target_instance_health_monitor) : Bool
-    return true if !target_instance_health_monitor["down"].as_bool == false
+    return true if target_instance_health_monitor["down"].as_bool
     return true if target_instance_health_monitor["uptime"].as_f < 90
 
     return false
