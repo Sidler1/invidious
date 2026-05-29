@@ -86,7 +86,10 @@ jobs:
         run: crystal spec
 
       - name: Build
-        run: crystal build --warnings all --error-on-warnings --stats --time --progress --error-trace src/invidious.cr
+        # Enforce --error-on-warnings only on stable Crystal. Nightly regularly
+        # introduces new deprecation warnings in stdlib/our deps that we can't
+        # control; the non-blocking nightly entry shouldn't fail on those.
+        run: crystal build --warnings all ${{ matrix.stable && '--error-on-warnings' || '' }} --stats --time --progress --error-trace src/invidious.cr
 
   build-docker:
     strategy:
