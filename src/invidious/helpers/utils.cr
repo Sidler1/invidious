@@ -425,11 +425,11 @@ def invidious_companion_encrypt(data, key : String = CONFIG.invidious_companion_
   # tag is appended to the ciphertext, matching the Web Crypto API the
   # companion uses. This must stay byte-for-byte compatible with
   # ../invidious-companion/src/lib/helpers/{encryptQuery,verifyRequest}.ts
-  key = OpenSSL::Digest.new("SHA256").update(key).final
+  derived_key = OpenSSL::Digest.new("SHA256").update(key).final
 
   cipher = OpenSSL::Cipher.new("aes-256-gcm")
   cipher.encrypt
-  cipher.key = key
+  cipher.key = derived_key
 
   # 96-bit random IV, per NIST recommendation for GCM (matches the companion).
   iv = Random::Secure.random_bytes(12)
@@ -457,9 +457,11 @@ def invidious_companion_decrypt(token : String, key : String = CONFIG.invidious_
   tag = raw[raw.size - 16, 16]
   ciphertext = raw[12, raw.size - 28]
 
+  derived_key = OpenSSL::Digest.new("SHA256").update(key).final
+
   cipher = OpenSSL::Cipher.new("aes-256-gcm")
   cipher.decrypt
-  cipher.key = OpenSSL::Digest.new("SHA256").update(key).final
+  cipher.key = derived_key
   cipher.iv = iv
 
   io = IO::Memory.new
