@@ -121,14 +121,17 @@ def error_atom_helper(env : HTTP::Server::Context, status_code : Int32, exceptio
   env.response.content_type = "application/atom+xml"
   env.response.status_code = status_code
 
-  return "<error>#{exception.inspect_with_backtrace}</error>"
+  LOGGER.error("#{env.request.method} #{env.request.path}: #{exception.inspect_with_backtrace}")
+
+  detail = CONFIG.log_level <= LogLevel::Debug ? exception.inspect_with_backtrace : exception.message.to_s
+  return "<error>#{HTML.escape(detail)}</error>"
 end
 
 def error_atom_helper(env : HTTP::Server::Context, status_code : Int32, message : String)
   env.response.content_type = "application/atom+xml"
   env.response.status_code = status_code
 
-  return "<error>#{message}</error>"
+  return "<error>#{HTML.escape(message)}</error>"
 end
 
 # -------------------
@@ -152,7 +155,12 @@ def error_json_helper(
   env.response.content_type = "application/json"
   env.response.status_code = status_code
 
-  error_message = {"error" => exception.message, "errorBacktrace" => exception.inspect_with_backtrace}
+  LOGGER.error("#{env.request.method} #{env.request.path}: #{exception.inspect_with_backtrace}")
+
+  error_message = {"error" => exception.message}
+  if CONFIG.log_level <= LogLevel::Debug
+    error_message = error_message.merge({"errorBacktrace" => exception.inspect_with_backtrace})
+  end
 
   if additional_fields
     error_message = error_message.merge(additional_fields)
@@ -195,17 +203,19 @@ def error_redirect_helper(env : HTTP::Server::Context)
     go_to_youtube = I18n.translate(locale, "next_steps_error_message_go_to_youtube")
     switch_instance = I18n.translate(locale, "Switch Invidious Instance")
 
+    safe_resource = HTML.escape(env.request.resource)
+
     return <<-END_HTML
       <p style="margin-bottom: 4px;">#{next_steps_text}</p>
       <ul>
         <li>
-          <a href="#{env.request.resource}">#{refresh}</a>
+          <a href="#{safe_resource}">#{refresh}</a>
         </li>
         <li>
           <a href="/redirect?referer=#{env.get("current_page")}">#{switch_instance}</a>
         </li>
         <li>
-          <a rel="noreferrer noopener" href="https://www.youtube.com#{env.request.resource}">#{go_to_youtube}</a>
+          <a rel="noreferrer noopener" href="https://www.youtube.com#{safe_resource}">#{go_to_youtube}</a>
         </li>
       </ul>
     END_HTML

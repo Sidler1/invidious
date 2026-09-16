@@ -170,6 +170,11 @@ class Config
   property socket_binding : SocketBindingConfig? = nil
   # Pool size for HTTP requests to youtube.com and ytimg.com (each domain has a separate pool of `pool_size`)
   property pool_size : Int32 = 100
+  # Maximum number of PostgreSQL connections Invidious keeps open. Applied to
+  # `database_url` as `max_pool_size` and `max_idle_pool_size` unless the URL
+  # already sets them. crystal-db's defaults (unlimited, one idle connection)
+  # open a fresh connection for almost every request under load.
+  property database_pool_size : Int32 = 20
   # HTTP Proxy configuration
   property http_proxy : HTTPProxyConfig? = nil
 
@@ -218,6 +223,38 @@ class Config
     else
       return false
     end
+  end
+
+  # Returns a human-readable description of the first setting that would only
+  # fail at runtime, or nil when everything is usable. Kept free of side
+  # effects so it can be unit-tested; `load` prints the result and exits.
+  def self.runtime_error(config : Config) : String?
+    if proxy = config.http_proxy
+      unless {"http", "socks5", "socks5h"}.includes?(proxy.type.downcase)
+        return "'http_proxy.type' must be one of http, socks5, socks5h (got #{proxy.type.inspect})"
+      end
+    end
+
+    if config.pool_size < 1
+      return "'pool_size' must be at least 1 (got #{config.pool_size})"
+    end
+
+    if config.channel_refresh_interval <= Time::Span.zero
+      return "'channel_refresh_interval' must be a positive duration such as 30m or 1h"
+    end
+
+    config.invidious_companion.each do |companion|
+      url = companion.private_url
+      if url.host.to_s.empty? || !{"http", "https"}.includes?(url.scheme)
+        return "'invidious_companion[].private_url' must be an absolute http(s) URL (got #{url.to_s.inspect})"
+      end
+    end
+
+    if config.database_pool_size < 1
+      return "'database_pool_size' must be at least 1 (got #{config.database_pool_size})"
+    end
+
+    nil
   end
 
   def self.load
@@ -301,6 +338,11 @@ class Config
       puts("WARNING: Invidious companion is required to view and playback videos. For more information see https://docs.invidious.io/installation/")
     end
 
+    if problem = runtime_error(config)
+      puts "Config: #{problem}"
+      exit(1)
+    end
+
     # HMAC_key is mandatory
     # See: https://github.com/iv-org/invidious/issues/3854
     if config.hmac_key.empty?
@@ -324,6 +366,12 @@ class Config
         exit(1)
       end
     end
+
+    # Apply pool limits unless the operator already set them in the URL.
+    db_params = URI::Params.parse(config.database_url.query || "")
+    db_params["max_pool_size"] = config.database_pool_size.to_s unless db_params.has_key?("max_pool_size")
+    db_params["max_idle_pool_size"] = config.database_pool_size.to_s unless db_params.has_key?("max_idle_pool_size")
+    config.database_url.query = db_params.to_s
 
     # Check if the socket configuration is valid
     if sb = config.socket_binding

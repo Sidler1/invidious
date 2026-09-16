@@ -47,6 +47,6 @@ class InvalidVideoID < InfoException
   end
 
   def message
-    return "Invalid video ID '#{id}'"
+    return "Invalid video ID '#{HTML.escape(id.to_s)}'"
   end
 end

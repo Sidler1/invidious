@@ -403,9 +403,18 @@ class OpenSSL::Cipher
     end
     buffer
   end
+
+  # Sets the expected GCM tag. Must be called before `#final` in decrypt mode;
+  # `#final` then raises when the tag does not match.
+  def auth_tag=(tag : Bytes)
+    # 0x11 == EVP_CTRL_GCM_SET_TAG (alias EVP_CTRL_AEAD_SET_TAG)
+    if LibCrypto.evp_cipher_ctx_ctrl(@ctx, 0x11, tag.size, tag.to_unsafe.as(Void*)) != 1
+      raise OpenSSL::Cipher::Error.new("Unable to set GCM authentication tag")
+    end
+  end
 end
 
-def invidious_companion_encrypt(data)
+def invidious_companion_encrypt(data, key : String = CONFIG.invidious_companion_key) : String
   timestamp = Time.utc.to_unix
   plaintext = "#{timestamp}|#{data}"
 
@@ -416,11 +425,11 @@ def invidious_companion_encrypt(data)
   # tag is appended to the ciphertext, matching the Web Crypto API the
   # companion uses. This must stay byte-for-byte compatible with
   # ../invidious-companion/src/lib/helpers/{encryptQuery,verifyRequest}.ts
-  key = OpenSSL::Digest.new("SHA256").update(CONFIG.invidious_companion_key).final
+  derived_key = OpenSSL::Digest.new("SHA256").update(key).final
 
   cipher = OpenSSL::Cipher.new("aes-256-gcm")
   cipher.encrypt
-  cipher.key = key
+  cipher.key = derived_key
 
   # 96-bit random IV, per NIST recommendation for GCM (matches the companion).
   iv = Random::Secure.random_bytes(12)
@@ -438,9 +447,41 @@ def invidious_companion_encrypt(data)
   return Base64.urlsafe_encode(io.to_slice)
 end
 
+# Inverse of `invidious_companion_encrypt`. Used by the specs to prove the
+# token layout matches the companion; not used on any request path.
+def invidious_companion_decrypt(token : String, key : String = CONFIG.invidious_companion_key) : String
+  raw = Base64.decode(token)
+  raise OpenSSL::Cipher::Error.new("Token too short") if raw.size < 12 + 16
+
+  iv = raw[0, 12]
+  tag = raw[raw.size - 16, 16]
+  ciphertext = raw[12, raw.size - 28]
+
+  derived_key = OpenSSL::Digest.new("SHA256").update(key).final
+
+  cipher = OpenSSL::Cipher.new("aes-256-gcm")
+  cipher.decrypt
+  cipher.key = derived_key
+  cipher.iv = iv
+
+  io = IO::Memory.new
+  io.write(cipher.update(ciphertext))
+  cipher.auth_tag = tag
+  io.write(cipher.final)
+
+  String.new(io.to_slice)
+end
+
 def validate_video_id(id : String) : Bool
   # This is the video ID regex. May be need to be changed
   # if Youtube ever decides to add more characters to their
   # video IDs.
   /\A[a-zA-Z0-9_-]{11}\z/.matches?(id)
+end
+
+# Keeps only strings that are well-formed YouTube video IDs. Used on every
+# import path that writes into `users.watched`, because that column is later
+# used in SQL and must never contain attacker-controlled free text.
+def filter_valid_video_ids(ids : Array(String)) : Array(String)
+  ids.select { |id| validate_video_id(id) }
 end

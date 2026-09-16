@@ -228,6 +228,18 @@ https_only: false
 #pool_size: 100
 
 ##
+## Maximum number of PostgreSQL connections Invidious keeps open
+## (also the number of idle connections kept between requests).
+## Must be below PostgreSQL's max_connections minus what other
+## clients need. Ignored if database_url already contains
+## max_pool_size / max_idle_pool_size.
+##
+## Accepted values: a positive integer
+## Default: 20
+##
+#database_pool_size: 20
+
+##
 ## Additional cookies to be sent when requesting the youtube API.
 ##
 ## Accepted values: a string in the format "name1=value1; name2=value2..."

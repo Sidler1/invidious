@@ -453,7 +453,7 @@ module Invidious::Routes::Playlists
         items = get_playlist_videos(playlist, offset: (page - 1) * 200)
       end
     rescue ex
-      return error_template(500, "Error encountered while retrieving playlist videos.<br>#{ex.message}")
+      return error_template(500, "Error encountered while retrieving playlist videos.<br>#{HTML.escape(ex.message.to_s)}")
     end
 
     if playlist.author == user.try &.email

@@ -27,3 +27,6 @@ CREATE TABLE IF NOT EXISTS public.playlists
 );
 
 GRANT ALL ON public.playlists TO current_user;
+
+CREATE INDEX IF NOT EXISTS playlists_author_idx
+  ON public.playlists USING btree (author);

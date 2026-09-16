@@ -81,7 +81,7 @@ clean:
 	rm -f invidious
 
 distclean: clean
-	rm -rf libs
+	rm -rf lib
 	rm -rf ~/.cache/{crystal,shards}
 
 

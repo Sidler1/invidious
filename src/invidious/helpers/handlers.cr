@@ -62,11 +62,20 @@ class Kemal::ExceptionHandler
 end
 
 class FilteredCompressHandler < HTTP::CompressHandler
-  exclude ["/videoplayback", "/videoplayback/*", "/vi/*", "/sb/*", "/ggpht/*", "/api/v1/auth/notifications"]
+  exclude ["/videoplayback", "/videoplayback/*", "/vi/*", "/sb/*", "/ggpht/*", "/api/v1/auth/notifications", "/companion/*"]
   exclude ["/api/v1/auth/notifications", "/data_control"], "POST"
+
+  # Already-compressed asset types; gzipping them only costs CPU.
+  INCOMPRESSIBLE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm"}
+
+  # True when the request path names an asset that must not be gzipped.
+  def self.incompressible?(path : String) : Bool
+    INCOMPRESSIBLE_EXTENSIONS.includes?(File.extname(path).downcase)
+  end
 
   def call(context)
     return call_next context if exclude_match? context
+    return call_next context if self.class.incompressible?(context.request.path)
     super
   end
 end

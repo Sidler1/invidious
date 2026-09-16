@@ -15,26 +15,51 @@ struct YoutubeConnectionPool
 
   def client(&)
     conn = pool.checkout
-    # Proxy needs to be reinstated every time we get a client from the pool
-    configure_proxy(conn) if CONFIG.http_proxy
+    discarded = false
 
     begin
+      # Proxy needs to be reinstated every time we get a client from the pool
+      configure_proxy(conn) if CONFIG.http_proxy
       response = yield conn
+    rescue ex : IO::Error | OpenSSL::Error
+      # Transport failure: the connection is broken. Replace it and retry
+      # the block once with a fresh, pool-managed connection.
+      discard(conn)
+      begin
+        conn = pool.checkout
+      rescue ex
+        # Nothing is checked out any more; ensure must not release the
+        # connection we just discarded.
+        discarded = true
+        raise ex
+      end
+
+      begin
+        configure_proxy(conn) if CONFIG.http_proxy
+        response = yield conn
+      rescue ex
+        # The retry failed as well: never return that connection to the pool.
+        discard(conn)
+        discarded = true
+        raise ex
+      end
     rescue ex
-      # The checked-out connection is likely broken; drop it from the pool
-      # and retry once with a fresh, pool-managed connection.
-      conn.close
-      pool.delete(conn)
-
-      conn = pool.checkout
-      conn.proxy = make_configured_http_proxy_client() if CONFIG.http_proxy
-
-      response = yield conn
+      # Application error (InfoException for a 4xx/5xx, JSON parse error, ...):
+      # never retry, so a failing upstream is not hit twice. The connection
+      # may be mid-response, so drop it instead of returning it to the pool.
+      discard(conn)
+      discarded = true
+      raise ex
     ensure
-      pool.release(conn)
+      pool.release(conn) unless discarded
     end
 
     response
+  end
+
+  private def discard(conn : HTTP::Client)
+    conn.close
+    pool.delete(conn)
   end
 
   private def build_pool
@@ -89,21 +114,48 @@ struct CompanionConnectionPool
 
   def client(&)
     wrapper = pool.checkout
+    discarded = false
 
     begin
       response = yield wrapper
+    rescue ex : IO::Error | OpenSSL::Error
+      # Transport failure: the connection is broken. Replace it and retry
+      # the block once with a fresh, pool-managed connection.
+      discard(wrapper)
+      begin
+        wrapper = pool.checkout
+      rescue ex
+        # Nothing is checked out any more; ensure must not release the
+        # connection we just discarded.
+        discarded = true
+        raise ex
+      end
+
+      begin
+        response = yield wrapper
+      rescue ex
+        # The retry failed as well: never return that connection to the pool.
+        discard(wrapper)
+        discarded = true
+        raise ex
+      end
     rescue ex
-      wrapper.close
-      pool.delete(wrapper)
-
-      wrapper = pool.checkout
-
-      response = yield wrapper
+      # Application error (InfoException, StreamAborted, ...): never retry,
+      # but the connection may be mid-response, so drop it instead of
+      # returning it to the pool.
+      discard(wrapper)
+      discarded = true
+      raise ex
     ensure
-      pool.release(wrapper)
+      pool.release(wrapper) unless discarded
     end
 
     response
+  end
+
+  private def discard(wrapper : CompanionWrapper)
+    wrapper.close
+    pool.delete(wrapper)
   end
 end
 
@@ -194,8 +246,15 @@ end
 
 # Fetches a HTTP pool for the specified subdomain of ytimg.com
 #
-# Creates a new one when the specified pool for the subdomain does not exist
+# Creates a new one when the specified pool for the subdomain does not exist.
+# The subdomain is validated because pools are memoised for the process
+# lifetime: an unbounded set of caller-chosen names would grow `YTIMG_POOLS`
+# forever and could point the pool at a foreign host.
 def get_ytimg_pool(subdomain)
+  if !Invidious::ProxyHosts.valid_ytimg_subdomain?(subdomain)
+    raise ArgumentError.new("Invalid ytimg subdomain #{subdomain.inspect}")
+  end
+
   if pool = YTIMG_POOLS[subdomain]?
     return pool
   else

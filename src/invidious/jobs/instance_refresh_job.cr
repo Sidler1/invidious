@@ -11,9 +11,14 @@ class Invidious::Jobs::InstanceListRefreshJob < Invidious::Jobs::BaseJob
 
   def begin
     loop do
-      refresh_instances
-      LOGGER.info("InstanceListRefreshJob: Done, sleeping for 30 minutes")
-      sleep 30.minute
+      begin
+        refresh_instances
+        LOGGER.info("InstanceListRefreshJob: Done, sleeping for 30 minutes")
+      rescue ex
+        LOGGER.error("InstanceListRefreshJob: #{ex.class}: #{ex.message}")
+      end
+
+      sleep 30.minutes
       Fiber.yield
     end
   end
@@ -57,23 +62,24 @@ class Invidious::Jobs::InstanceListRefreshJob < Invidious::Jobs::BaseJob
 
   # Fetches information regarding instances from api.invidious.io or an otherwise configured URL
   private def fetch_instances : Array(JSON::Any)
+    # We directly call the stdlib HTTP::Client here as it allows us to negate the effects
+    # of the force_resolve config option. This is needed as api.invidious.io does not support ipv6
+    # and as such the following request raises if we were to use force_resolve with the ipv6 value.
+    instance_api_client = HTTP::Client.new(URI.parse("https://api.invidious.io"))
+
+    # Timeouts
+    instance_api_client.connect_timeout = 10.seconds
+    instance_api_client.dns_timeout = 10.seconds
+    instance_api_client.read_timeout = 10.seconds
+
     begin
-      # We directly call the stdlib HTTP::Client here as it allows us to negate the effects
-      # of the force_resolve config option. This is needed as api.invidious.io does not support ipv6
-      # and as such the following request raises if we were to use force_resolve with the ipv6 value.
-      instance_api_client = HTTP::Client.new(URI.parse("https://api.invidious.io"))
-
-      # Timeouts
-      instance_api_client.connect_timeout = 10.seconds
-      instance_api_client.dns_timeout = 10.seconds
-
-      raw_instance_list = JSON.parse(instance_api_client.get("/instances.json").body).as_a
+      JSON.parse(instance_api_client.get("/instances.json").body).as_a
+    rescue ex
+      LOGGER.warn("InstanceListRefreshJob: could not fetch instance list: #{ex.class}: #{ex.message}")
+      [] of JSON::Any
+    ensure
       instance_api_client.close
-    rescue ex : Socket::ConnectError | IO::TimeoutError | JSON::ParseException
-      raw_instance_list = [] of JSON::Any
     end
-
-    return raw_instance_list
   end
 
   # Checks if the given target instance is outdated

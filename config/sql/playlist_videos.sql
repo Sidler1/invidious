@@ -17,3 +17,6 @@ CREATE TABLE IF NOT EXISTS public.playlist_videos
 );
 
 GRANT ALL ON TABLE public.playlist_videos TO current_user;
+
+CREATE INDEX IF NOT EXISTS playlist_videos_plid_idx
+  ON public.playlist_videos USING btree (plid);

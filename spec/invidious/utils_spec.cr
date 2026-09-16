@@ -43,4 +43,15 @@ Spectator.describe "Utils" do
       expect(decode_date("8 years ago")).to be_close(Time.utc - 8.years, 500.milliseconds)
     end
   end
+
+  describe "filter_valid_video_ids" do
+    it "keeps well-formed 11-character IDs" do
+      expect(filter_valid_video_ids(["dQw4w9WgXcQ", "a-b_c-d_e-f"])).to eq(["dQw4w9WgXcQ", "a-b_c-d_e-f"])
+    end
+
+    it "drops anything that is not exactly an ID" do
+      ids = ["dQw4w9WgXcQ", "", "short", "dQw4w9WgXcQ')) OR 1=1 --", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
+      expect(filter_valid_video_ids(ids)).to eq(["dQw4w9WgXcQ"])
+    end
+  end
 end

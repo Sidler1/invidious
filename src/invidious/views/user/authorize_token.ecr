@@ -30,7 +30,7 @@
     <div class="h-box">
         <form class="pure-form pure-form-aligned" action="/authorize_token" method="post">
             <% if callback_url %>
-                <legend><%= I18n.translate(locale, "Authorize token for `x`?", "#{callback_url.scheme}://#{callback_url.host}")  %></legend>
+                <legend><%= I18n.translate(locale, "Authorize token for `x`?", HTML.escape("#{callback_url.scheme}://#{callback_url.host}"))  %></legend>
             <% else %>
                 <legend><%= I18n.translate(locale, "Authorize token?") %></legend>
             <% end %>
@@ -53,7 +53,7 @@
                 </div>
                 <div class="pure-u-1-2">
                     <% if callback_url %>
-                        <a class="pure-button" href="<%= callback_url %>">
+                        <a class="pure-button" href="<%= HTML.escape(callback_url.to_s) %>">
                     <% else %>
                         <a class="pure-button" href="/">
                     <% end %>
@@ -63,10 +63,10 @@
             </div>
 
             <% scopes.each_with_index do |scope, i| %>
-                <input type="hidden" name="scopes[<%= i %>]" value="<%= scope %>">
+                <input type="hidden" name="scopes[<%= i %>]" value="<%= HTML.escape(scope) %>">
             <% end %>
             <% if callback_url %>
-                <input type="hidden" name="callbackUrl" value="<%= callback_url %>">
+                <input type="hidden" name="callbackUrl" value="<%= HTML.escape(callback_url.to_s) %>">
             <% end %>
             <% if expire %>
                 <input type="hidden" name="expire" value="<%= expire %>">

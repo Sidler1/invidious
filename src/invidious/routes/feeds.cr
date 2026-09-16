@@ -410,8 +410,19 @@ module Invidious::Routes::Feeds
     locale = env.get("preferences").as(Preferences).locale
 
     token = env.params.url["token"]
-    body = env.request.body.not_nil!.gets_to_end
-    signature = env.request.headers["X-Hub-Signature"].lchop("sha1=")
+
+    signature_header = env.request.headers["X-Hub-Signature"]?
+    if signature_header.nil?
+      LOGGER.error("/feed/webhook/#{token} : Missing signature")
+      haltf env, status_code: 200
+    end
+    signature = signature_header.lchop("sha1=")
+
+    body = read_body_limited(env.request.body, WEBHOOK_MAX_BODY_BYTES)
+    if body.nil?
+      LOGGER.error("/feed/webhook/#{token} : Body exceeds #{WEBHOOK_MAX_BODY_BYTES} bytes")
+      haltf env, status_code: 413
+    end
 
     if signature != OpenSSL::HMAC.hexdigest(:sha1, HMAC_KEY, body)
       LOGGER.error("/feed/webhook/#{token} : Invalid signature")
@@ -452,7 +463,7 @@ module Invidious::Routes::Feeds
 
         was_insert = Invidious::Database::ChannelVideos.insert(video, with_premiere_timestamp: true)
         if was_insert
-          NOTIFICATION_CHANNEL.send(VideoNotification.from_video(video))
+          Invidious::Jobs::NotificationJob.enqueue(VideoNotification.from_video(video))
         end
       end
     end

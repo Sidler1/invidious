@@ -208,9 +208,9 @@ module Invidious::Routes::Account
     scopes = env.params.query["scopes"]?.try &.split(",")
     scopes ||= [] of String
 
-    callback_url = env.params.query["callback_url"]?
-    if callback_url
-      callback_url = URI.parse(callback_url)
+    callback_url = env.params.query["callback_url"]?.try { |raw| URI.parse(raw) }
+    if callback_url && !{"http", "https"}.includes?(callback_url.scheme)
+      callback_url = nil
     end
 
     expire = env.params.query["expire"]?.try &.to_i?
@@ -249,6 +249,10 @@ module Invidious::Routes::Account
     if callback_url
       access_token = URI.encode_www_form(access_token)
       url = URI.parse(callback_url)
+
+      if !{"http", "https"}.includes?(url.scheme)
+        return error_template(400, "Invalid callback URL")
+      end
 
       if url.query
         query = HTTP::Params.parse(url.query.not_nil!)
