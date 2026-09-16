@@ -107,6 +107,7 @@ struct Invidious::User
       if data["watch_history"]?
         user.watched += filter_valid_video_ids(data["watch_history"].as_a.map(&.as_s))
         user.watched.reverse!.uniq!.reverse!
+        user.watched = user.watched.last(Invidious::Database::Users::MAX_WATCHED_HISTORY)
         Invidious::Database::Users.update_watch_history(user)
       end
 
@@ -237,6 +238,7 @@ struct Invidious::User
         watched.reverse! # YouTube have newest first
         user.watched += filter_valid_video_ids(watched)
         user.watched.uniq!
+        user.watched = user.watched.last(Invidious::Database::Users::MAX_WATCHED_HISTORY)
         Invidious::Database::Users.update_watch_history(user)
         return true
       else
@@ -316,6 +318,7 @@ struct Invidious::User
                   .map(&.lchop("https://www.youtube.com/watch?v=")))
 
                 user.watched.uniq!
+                user.watched = user.watched.last(Invidious::Database::Users::MAX_WATCHED_HISTORY)
                 Invidious::Database::Users.update_watch_history(user)
 
                 user.subscriptions += db.query_all("SELECT url FROM subscriptions", as: String)

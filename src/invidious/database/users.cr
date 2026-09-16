@@ -3,6 +3,10 @@ require "./base.cr"
 module Invidious::Database::Users
   extend self
 
+  # Upper bound on the watch history kept per user. `watched` is loaded on
+  # every logged-in request, so it must not grow without limit.
+  MAX_WATCHED_HISTORY = 5000
+
   # -------------------
   #  Insert / delete
   # -------------------
@@ -52,11 +56,19 @@ module Invidious::Database::Users
   def mark_watched(user : User, vid : String)
     request = <<-SQL
       UPDATE users
-      SET watched = array_append(array_remove(watched, $1), $1)
+      SET watched = ARRAY(
+        SELECT w FROM (
+          SELECT w, n
+          FROM unnest(array_append(array_remove(watched, $1), $1)) WITH ORDINALITY AS t(w, n)
+          ORDER BY n DESC
+          LIMIT $3
+        ) AS newest
+        ORDER BY n
+      )
       WHERE email = $2
     SQL
 
-    PG_DB.exec(request, vid, user.email)
+    PG_DB.exec(request, vid, user.email, MAX_WATCHED_HISTORY)
   end
 
   def mark_unwatched(user : User, vid : String)
