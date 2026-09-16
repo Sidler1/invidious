@@ -676,8 +676,11 @@ module YoutubeAPI
       end
 
       return response_body
+    rescue ex : InfoException
+      raise ex
     rescue ex
-      raise InfoException.new("Error while communicating with Invidious companion: " + (ex.message || "no extra info found"))
+      LOGGER.error("companion: #{ex.class}: #{ex.message}")
+      raise InfoException.new("Error while communicating with Invidious companion")
     end
   end
 

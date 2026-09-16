@@ -121,7 +121,10 @@ def error_atom_helper(env : HTTP::Server::Context, status_code : Int32, exceptio
   env.response.content_type = "application/atom+xml"
   env.response.status_code = status_code
 
-  return "<error>#{exception.inspect_with_backtrace}</error>"
+  LOGGER.error("#{env.request.method} #{env.request.path}: #{exception.inspect_with_backtrace}")
+
+  detail = CONFIG.log_level <= LogLevel::Debug ? exception.inspect_with_backtrace : exception.message.to_s
+  return "<error>#{HTML.escape(detail)}</error>"
 end
 
 def error_atom_helper(env : HTTP::Server::Context, status_code : Int32, message : String)
@@ -152,7 +155,12 @@ def error_json_helper(
   env.response.content_type = "application/json"
   env.response.status_code = status_code
 
-  error_message = {"error" => exception.message, "errorBacktrace" => exception.inspect_with_backtrace}
+  LOGGER.error("#{env.request.method} #{env.request.path}: #{exception.inspect_with_backtrace}")
+
+  error_message = {"error" => exception.message}
+  if CONFIG.log_level <= LogLevel::Debug
+    error_message = error_message.merge({"errorBacktrace" => exception.inspect_with_backtrace})
+  end
 
   if additional_fields
     error_message = error_message.merge(additional_fields)
