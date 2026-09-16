@@ -463,7 +463,7 @@ module Invidious::Routes::Feeds
 
         was_insert = Invidious::Database::ChannelVideos.insert(video, with_premiere_timestamp: true)
         if was_insert
-          NOTIFICATION_CHANNEL.send(VideoNotification.from_video(video))
+          Invidious::Jobs::NotificationJob.enqueue(VideoNotification.from_video(video))
         end
       end
     end

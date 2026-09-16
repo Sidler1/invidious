@@ -29,6 +29,21 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
   def initialize(@notification_channel, @connection_channel, @pg_url)
   end
 
+  # Hands a notification to the job without ever blocking the caller. If the
+  # queue is full (consumer dead or overloaded) the notification is dropped;
+  # the channel's feed is marked for a refresh so subscribers still see the
+  # video on their next feed load.
+  def self.enqueue(notification : VideoNotification) : Bool
+    select
+    when NOTIFICATION_CHANNEL.send(notification)
+      true
+    else
+      LOGGER.warn("NotificationJob: queue full, dropping notification for #{notification.video_id}")
+      Invidious::Database::Users.feed_needs_update(notification.channel_id)
+      false
+    end
+  end
+
   def begin
     connections = [] of ::Channel(PQ::Notification)
 
