@@ -14,7 +14,9 @@ module Invidious::Routes::API::Manifest
       end
 
       invidious_companion = CONFIG.invidious_companion.sample
-      return env.redirect "#{invidious_companion.public_url}/api/manifest/dash/id/#{id}?#{env.params.query}&check=#{invidious_companion_encrypt(id)}"
+      query = env.params.query.to_s
+      query += "&" unless query.empty?
+      return env.redirect "#{invidious_companion.public_url}/api/manifest/dash/id/#{id}?#{query}check=#{invidious_companion_encrypt(id)}"
     end
 
     # Since some implementations create playlists based on resolution regardless of different codecs,

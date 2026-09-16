@@ -277,7 +277,9 @@ module Invidious::Routes::VideoPlayback
       end
 
       invidious_companion = CONFIG.invidious_companion.sample
-      return env.redirect "#{invidious_companion.public_url}/latest_version?#{env.params.query}&check=#{invidious_companion_encrypt(id)}"
+      query = env.params.query.to_s
+      query += "&" unless query.empty?
+      return env.redirect "#{invidious_companion.public_url}/latest_version?#{query}check=#{invidious_companion_encrypt(id)}"
     end
 
     id = env.params.query["id"]?
