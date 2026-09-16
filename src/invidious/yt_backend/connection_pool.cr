@@ -92,12 +92,15 @@ struct CompanionConnectionPool
 
     begin
       response = yield wrapper
-    rescue ex
+    rescue ex : IO::Error | OpenSSL::Error
+      # Only transport failures mean the pooled connection is broken. Errors
+      # raised by the block for a well-formed reply propagate unchanged so a
+      # failing companion is not hit twice and a partially written response
+      # is never re-streamed.
       wrapper.close
       pool.delete(wrapper)
 
       wrapper = pool.checkout
-
       response = yield wrapper
     ensure
       pool.release(wrapper)

@@ -1,4 +1,10 @@
 module Invidious::Routes::Companion
+  # Raised when the companion failed after response bytes were already
+  # handed to the client. Deliberately not an IO::Error, so the connection
+  # pool does not retry the block and write a second body.
+  class StreamAborted < Exception
+  end
+
   # GET /companion/*
   def self.get_companion(env)
     proxy(env) do |wrapper, url, headers|
@@ -33,6 +39,8 @@ module Invidious::Routes::Companion
 
       yield wrapper, url, headers
     end
+  rescue ex : StreamAborted
+    LOGGER.error("/companion proxy: #{ex.message}: #{ex.cause.try(&.message)}")
   rescue ex
     LOGGER.error("/companion proxy: #{ex.class}: #{ex.message}")
     bad_gateway(env)
@@ -52,6 +60,10 @@ module Invidious::Routes::Companion
       env.response.headers[key] = value if Invidious::CompanionProxy.response_header_allowed?(key)
     end
 
-    IO.copy response.body_io, env.response
+    begin
+      IO.copy response.body_io, env.response
+    rescue ex
+      raise StreamAborted.new("companion response aborted mid-stream", cause: ex)
+    end
   end
 end
