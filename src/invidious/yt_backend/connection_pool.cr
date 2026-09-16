@@ -24,18 +24,23 @@ struct YoutubeConnectionPool
     rescue ex : IO::Error | OpenSSL::Error
       # Transport failure: the connection is broken. Replace it and retry
       # the block once with a fresh, pool-managed connection.
-      conn.close
-      pool.delete(conn)
-
+      discard(conn)
       conn = pool.checkout
-      configure_proxy(conn) if CONFIG.http_proxy
-      response = yield conn
+
+      begin
+        configure_proxy(conn) if CONFIG.http_proxy
+        response = yield conn
+      rescue ex
+        # The retry failed as well: never return that connection to the pool.
+        discard(conn)
+        discarded = true
+        raise ex
+      end
     rescue ex
       # Application error (InfoException for a 4xx/5xx, JSON parse error, ...):
       # never retry, so a failing upstream is not hit twice. The connection
       # may be mid-response, so drop it instead of returning it to the pool.
-      conn.close
-      pool.delete(conn)
+      discard(conn)
       discarded = true
       raise ex
     ensure
@@ -43,6 +48,11 @@ struct YoutubeConnectionPool
     end
 
     response
+  end
+
+  private def discard(conn : HTTP::Client)
+    conn.close
+    pool.delete(conn)
   end
 
   private def build_pool
@@ -104,17 +114,22 @@ struct CompanionConnectionPool
     rescue ex : IO::Error | OpenSSL::Error
       # Transport failure: the connection is broken. Replace it and retry
       # the block once with a fresh, pool-managed connection.
-      wrapper.close
-      pool.delete(wrapper)
-
+      discard(wrapper)
       wrapper = pool.checkout
-      response = yield wrapper
+
+      begin
+        response = yield wrapper
+      rescue ex
+        # The retry failed as well: never return that connection to the pool.
+        discard(wrapper)
+        discarded = true
+        raise ex
+      end
     rescue ex
       # Application error (InfoException, StreamAborted, ...): never retry,
       # but the connection may be mid-response, so drop it instead of
       # returning it to the pool.
-      wrapper.close
-      pool.delete(wrapper)
+      discard(wrapper)
       discarded = true
       raise ex
     ensure
@@ -122,6 +137,11 @@ struct CompanionConnectionPool
     end
 
     response
+  end
+
+  private def discard(wrapper : CompanionWrapper)
+    wrapper.close
+    pool.delete(wrapper)
   end
 end
 
