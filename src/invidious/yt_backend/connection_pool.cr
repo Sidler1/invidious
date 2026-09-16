@@ -25,7 +25,9 @@ struct YoutubeConnectionPool
       # Transport failure: the connection is broken. Replace it and retry
       # the block once with a fresh, pool-managed connection.
       discard(conn)
+      discarded = true
       conn = pool.checkout
+      discarded = false
 
       begin
         configure_proxy(conn) if CONFIG.http_proxy
@@ -115,7 +117,9 @@ struct CompanionConnectionPool
       # Transport failure: the connection is broken. Replace it and retry
       # the block once with a fresh, pool-managed connection.
       discard(wrapper)
+      discarded = true
       wrapper = pool.checkout
+      discarded = false
 
       begin
         response = yield wrapper
