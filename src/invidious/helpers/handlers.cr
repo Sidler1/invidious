@@ -65,8 +65,12 @@ class FilteredCompressHandler < HTTP::CompressHandler
   exclude ["/videoplayback", "/videoplayback/*", "/vi/*", "/sb/*", "/ggpht/*", "/api/v1/auth/notifications"]
   exclude ["/api/v1/auth/notifications", "/data_control"], "POST"
 
+  # Already-compressed asset types; gzipping them only costs CPU.
+  INCOMPRESSIBLE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm"}
+
   def call(context)
     return call_next context if exclude_match? context
+    return call_next context if INCOMPRESSIBLE_EXTENSIONS.includes?(File.extname(context.request.path).downcase)
     super
   end
 end

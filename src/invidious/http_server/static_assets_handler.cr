@@ -71,11 +71,14 @@ module Invidious::HttpServer
       return flush_io_to_cache(retrieve_bytes_from, file_path, file_info)
     end
 
-    # Writes file data to the cache
+    # Writes file data to the cache. The counter only grows when a file is
+    # actually stored; otherwise one large uncached file would inflate it on
+    # every request until nothing fits any more.
     private def flush_io_to_cache(io, file_path, file_info)
-      if (@@current_cache_size += file_info.size) <= CACHE_LIMIT
-        @@cached_files[file_path] = CachedFile.new(io.to_slice, file_info.size, file_info.modification_time)
-      end
+      return if @@current_cache_size + file_info.size > CACHE_LIMIT
+
+      @@current_cache_size += file_info.size
+      @@cached_files[file_path] = CachedFile.new(io.to_slice, file_info.size, file_info.modification_time)
     end
 
     # Either send the file in full, or just fragments of it depending on the request
