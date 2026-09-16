@@ -68,6 +68,8 @@ module Invidious::Routes::VideoPlayback
             client.close
             client = make_client(URI.parse(new_host), region, force_resolve: true)
           end
+
+          url = "#{location.request_target}&host=#{location.host}#{region ? "&region=#{region}" : ""}"
         else
           break
         end
