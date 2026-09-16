@@ -314,7 +314,10 @@ module Invidious::Routes::PreferencesRoute
       # TODO: Find a way to prevent browser timeout
 
       HTTP::FormData.parse(env.request) do |part|
-        body = part.body.gets_to_end
+        body = read_body_limited(part.body, IMPORT_MAX_BODY_BYTES)
+        if body.nil?
+          return error_template(413, "Import file is too large.")
+        end
         type = part.headers["Content-Type"]
 
         next if body.empty?

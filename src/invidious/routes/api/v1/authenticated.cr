@@ -41,14 +41,17 @@ module Invidious::Routes::API::V1::Authenticated
   def self.import_invidious(env)
     user = env.get("user").as(User)
 
+    body = read_body_limited(env.request.body, IMPORT_MAX_BODY_BYTES)
+    if body.nil?
+      return error_json(413, "Import exceeds #{IMPORT_MAX_BODY_BYTES} bytes")
+    end
+    body = "{}" if body.empty?
+
     begin
-      if body = env.request.body
-        body = env.request.body.not_nil!.gets_to_end
-      else
-        body = "{}"
-      end
       Invidious::User::Import.from_invidious(user, body)
-    rescue
+    rescue ex
+      LOGGER.error("import_invidious: #{ex.class}: #{ex.message}")
+      return error_json(400, "Invalid import data")
     end
 
     env.response.status_code = 204
@@ -469,15 +472,16 @@ module Invidious::Routes::API::V1::Authenticated
     env.response.content_type = "application/json"
 
     scopes = env.get("scopes").as(Array(String))
+    user = env.get("user").as(User)
 
     session = env.params.json["session"]?.try &.as(String)
     session ||= env.get("session").as(String)
 
     # Allow tokens to revoke other tokens with correct scope
     if session == env.get("session").as(String)
-      Invidious::Database::SessionIDs.delete(sid: session)
+      Invidious::Database::SessionIDs.delete(sid: session, email: user.email)
     elsif scopes_include_scope(scopes, "GET:tokens")
-      Invidious::Database::SessionIDs.delete(sid: session)
+      Invidious::Database::SessionIDs.delete(sid: session, email: user.email)
     else
       return error_json(400, "Cannot revoke session #{session}")
     end
