@@ -9,8 +9,12 @@ module Invidious::Routes::API::Manifest
     region = env.params.query["region"]?
 
     if CONFIG.invidious_companion.present?
+      unless validate_video_id(id)
+        return error_template(400, InvalidVideoID.new(id))
+      end
+
       invidious_companion = CONFIG.invidious_companion.sample
-      return env.redirect "#{invidious_companion.public_url}/api/manifest/dash/id/#{id}?#{env.params.query}"
+      return env.redirect "#{invidious_companion.public_url}/api/manifest/dash/id/#{id}?#{env.params.query}&check=#{invidious_companion_encrypt(id)}"
     end
 
     # Since some implementations create playlists based on resolution regardless of different codecs,

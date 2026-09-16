@@ -271,8 +271,13 @@ module Invidious::Routes::VideoPlayback
   # so we have a mechanism here to redirect to the latest version
   def self.latest_version(env)
     if CONFIG.invidious_companion.present?
+      id = env.params.query["id"]?
+      unless id && validate_video_id(id)
+        return error_template(400, InvalidVideoID.new(id))
+      end
+
       invidious_companion = CONFIG.invidious_companion.sample
-      return env.redirect "#{invidious_companion.public_url}/latest_version?#{env.params.query}"
+      return env.redirect "#{invidious_companion.public_url}/latest_version?#{env.params.query}&check=#{invidious_companion_encrypt(id)}"
     end
 
     id = env.params.query["id"]?
