@@ -2,13 +2,12 @@
 # Lint
 #
 
-# Exclude assigns for ECR files and connection pool (discarded flag guarding checkout)
+# Exclude assigns for ECR files
 Lint/UselessAssign:
   Excluded:
   - src/invidious.cr
   - src/invidious/helpers/errors.cr
   - src/invidious/routes/*.cr
-  - src/invidious/yt_backend/connection_pool.cr
 
 # Ignore false negative (if !db.query_one?...)
 Lint/UnreachableCode:
