@@ -1,49 +1,124 @@
 #!/usr/bin/env bash
+# Rolling update for a systemd-managed Invidious install.
+#
+# Layout under INSTALL_DIR (default /var/www/invidious):
+#   releases/<id>/          one directory per downloaded release
+#   current -> releases/..  symlink the service runs from (switched atomically)
+#   config.yml              live configuration, never inside a release
+#   invidious.log           log file, never inside a release
+#
+# One-time migration from the old in-place layout:
+#   mv $INSTALL_DIR/config/config.yml $INSTALL_DIR/config.yml
+#   install the updated invidious.service (paths point at .../current)
+#   systemctl daemon-reload
+#
+# After starting the new release a health check runs; on failure the previous
+# release is restored. Requires: curl, tar, sha256sum, gh (for provenance).
 set -euo pipefail
 
-# Install location can be overridden: INSTALL_DIR=/home/invidious/invidious ./update.sh
 INSTALL_DIR="${INSTALL_DIR:-/var/www/invidious}"
 SERVICE="${SERVICE:-invidious}"
-RELEASE_BASE="https://github.com/Sidler1/invidious/releases/download/release-master"
+SERVICE_USER="${SERVICE_USER:-invidious}"
+RELEASE_BASE="${RELEASE_BASE:-https://github.com/Sidler1/invidious/releases/download/release-master}"
 TARBALL="invidious-x86_64-unknown-linux-gnu.tar.gz"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/v1/stats}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
+KEEP_RELEASES="${KEEP_RELEASES:-3}"
+REQUIRE_ATTESTATION="${REQUIRE_ATTESTATION:-1}"
+GITHUB_REPO="${GITHUB_REPO:-Sidler1/invidious}"
+SYSTEMCTL="${SYSTEMCTL:-systemctl}"
 
-cd "$INSTALL_DIR"
+log() { printf '[update] %s\n' "$*"; }
+die() { log "ERROR: $*" >&2; exit 1; }
 
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
-echo "Downloading release..."
-wget -O "$workdir/$TARBALL" "$RELEASE_BASE/$TARBALL"
-wget -O "$workdir/$TARBALL.sha256" "$RELEASE_BASE/$TARBALL.sha256"
+log "Downloading release..."
+curl -fsSL -o "$workdir/$TARBALL" "$RELEASE_BASE/$TARBALL"
+curl -fsSL -o "$workdir/$TARBALL.sha256" "$RELEASE_BASE/$TARBALL.sha256"
 
-echo "Verifying checksum..."
-# The published .sha256 references the bare filename, so verify from workdir.
-( cd "$workdir" && sha256sum -c "$TARBALL.sha256" )
+log "Verifying checksum..."
+( cd "$workdir" && sha256sum -c --quiet "$TARBALL.sha256" )
 
-echo "Extracting to staging..."
-staging="$workdir/staging"
-mkdir -p "$staging"
-tar xzf "$workdir/$TARBALL" -C "$staging"
+if [ "$REQUIRE_ATTESTATION" = "1" ]; then
+  command -v gh >/dev/null || die "gh CLI is required to verify build provenance (set REQUIRE_ATTESTATION=0 to skip)"
+  log "Verifying build provenance..."
+  gh attestation verify "$workdir/$TARBALL" --repo "$GITHUB_REPO"
+fi
 
-echo "Stopping $SERVICE..."
-systemctl stop "$SERVICE"
+release_id="$(sha256sum "$workdir/$TARBALL" | cut -c1-16)"
+release_dir="$INSTALL_DIR/releases/$release_id"
+current_link="$INSTALL_DIR/current"
 
-# From here on, make sure the service is brought back up even if a step fails.
-trap 'systemctl start "$SERVICE" || true; rm -rf "$workdir"' EXIT
+if [ -d "$release_dir" ] && [ "$(readlink -f "$current_link" 2>/dev/null || true)" = "$release_dir" ]; then
+  log "Release $release_id is already installed and active. Nothing to do."
+  exit 0
+fi
 
-echo "Installing update..."
-# Replace code + bundled assets wholesale so files removed upstream don't
-# linger. config/config.yml is never shipped in the tarball, so the running
-# configuration is left untouched (only config.example.yml + sql are updated).
-rm -rf assets locales
-cp -a "$staging"/. "$INSTALL_DIR"/
-chmod +x "$INSTALL_DIR/invidious"
+[ -f "$INSTALL_DIR/config.yml" ] || die "Expected live config at $INSTALL_DIR/config.yml (see header of this script)"
 
-echo "Starting $SERVICE..."
-systemctl start "$SERVICE"
+log "Extracting release $release_id..."
+rm -rf "$release_dir"
+mkdir -p "$release_dir"
+tar --no-same-owner -xzf "$workdir/$TARBALL" -C "$release_dir"
+chmod +x "$release_dir/invidious"
+mkdir -p "$release_dir/config"
+ln -sfn "$INSTALL_DIR/config.yml" "$release_dir/config/config.yml"
+if [ "$(id -u)" = 0 ]; then
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$release_dir"
+fi
 
-# Update succeeded; drop the restart-on-failure trap.
-trap 'rm -rf "$workdir"' EXIT
+previous="$(readlink -f "$current_link" 2>/dev/null || true)"
 
-echo "Update complete."
-journalctl -u "$SERVICE" -n 50 --no-pager
+switch_to() {
+  ln -sfn "$1" "$current_link.tmp"
+  mv -T "$current_link.tmp" "$current_link"
+}
+
+healthy() {
+  local deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if curl -fsS -o /dev/null "$HEALTH_URL"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+log "Stopping $SERVICE..."
+"$SYSTEMCTL" stop "$SERVICE"
+switch_to "$release_dir"
+log "Starting $SERVICE..."
+"$SYSTEMCTL" start "$SERVICE"
+
+if healthy; then
+  log "Release $release_id is up and healthy."
+else
+  log "Health check against $HEALTH_URL failed for release $release_id."
+  if [ -n "$previous" ] && [ -d "$previous" ]; then
+    log "Rolling back to $previous..."
+    "$SYSTEMCTL" stop "$SERVICE"
+    switch_to "$previous"
+    "$SYSTEMCTL" start "$SERVICE"
+    if healthy; then
+      log "Rollback succeeded."
+    else
+      log "Rollback started but the health check is still failing."
+    fi
+  fi
+  die "Update failed."
+fi
+
+# Prune old releases, keeping the newest KEEP_RELEASES and never the active one.
+find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+  | sort -rn | tail -n +$((KEEP_RELEASES + 1)) | cut -d' ' -f2- \
+  | while read -r old; do
+      [ "$(readlink -f "$old")" = "$(readlink -f "$current_link")" ] && continue
+      log "Pruning $old"
+      rm -rf "$old"
+    done
+
+log "Update complete."
+"$SYSTEMCTL" status "$SERVICE" --no-pager -n 20 || true
