@@ -444,3 +444,10 @@ def validate_video_id(id : String) : Bool
   # video IDs.
   /\A[a-zA-Z0-9_-]{11}\z/.matches?(id)
 end
+
+# Keeps only strings that are well-formed YouTube video IDs. Used on every
+# import path that writes into `users.watched`, because that column is later
+# used in SQL and must never contain attacker-controlled free text.
+def filter_valid_video_ids(ids : Array(String)) : Array(String)
+  ids.select { |id| validate_video_id(id) }
+end
