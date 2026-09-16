@@ -31,16 +31,18 @@ jobs:
           # The version constants are baked at compile time from git, so the build needs the full history.
           fetch-depth: 0
 
-      # Compile a fully static (musl) binary using the official Crystal Alpine
-      # image purely as a toolchain. This does NOT build or push a container
+      # Compile a fully static (musl) binary using the same Crystal Alpine image
+      # as docker/Dockerfile purely as a toolchain. Its entrypoint is `crystal`,
+      # so the shell has to be set explicitly. This does NOT build or push a container
       # image — it only produces ./invidious and a populated ./assets/.
       - name: Build static binary
         run: |
           docker run --rm \
             -v "${PWD}":/src -w /src \
             -e OPENSSL_VERSION -e OPENSSL_SHA256 \
+            --entrypoint sh \
             84codes/crystal:1.21.0-alpine \
-            sh -eu scripts/build-static.sh
+            -eu scripts/build-static.sh
 
       - name: Assemble release tree
         run: |
