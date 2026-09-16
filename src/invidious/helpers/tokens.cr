@@ -95,12 +95,15 @@ def validate_request(token, session, request, key, locale = nil)
     raise InfoException.new("Invalid signature")
   end
 
-  if token["nonce"]? && (nonce = Invidious::Database::Nonces.select(token["nonce"].as_s))
-    if nonce[1] > Time.utc
-      Invidious::Database::Nonces.update_set_expired(nonce[0])
-    else
+  if token["nonce"]?
+    nonce = Invidious::Database::Nonces.select(token["nonce"].as_s)
+    # A token that claims a nonce is only valid while that nonce is stored and
+    # unspent. After the hourly purge removes spent rows the token must not
+    # become valid again.
+    if nonce.nil? || nonce[1] <= Time.utc
       raise InfoException.new("Erroneous token")
     end
+    Invidious::Database::Nonces.update_set_expired(nonce[0])
   end
 
   return {scopes, expire, token["signature"].as_s}
