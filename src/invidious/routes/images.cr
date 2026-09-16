@@ -27,6 +27,9 @@ module Invidious::Routes::Images
 
   def self.get_storyboard(env)
     authority = env.params.url["authority"]
+    if !Invidious::ProxyHosts.valid_ytimg_subdomain?(authority)
+      haltf env, 400
+    end
     id = env.params.url["id"]
     storyboard = env.params.url["storyboard"]
     index = env.params.url["index"]

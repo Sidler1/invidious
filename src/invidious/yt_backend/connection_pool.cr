@@ -194,8 +194,15 @@ end
 
 # Fetches a HTTP pool for the specified subdomain of ytimg.com
 #
-# Creates a new one when the specified pool for the subdomain does not exist
+# Creates a new one when the specified pool for the subdomain does not exist.
+# The subdomain is validated because pools are memoised for the process
+# lifetime: an unbounded set of caller-chosen names would grow `YTIMG_POOLS`
+# forever and could point the pool at a foreign host.
 def get_ytimg_pool(subdomain)
+  if !Invidious::ProxyHosts.valid_ytimg_subdomain?(subdomain)
+    raise ArgumentError.new("Invalid ytimg subdomain #{subdomain.inspect}")
+  end
+
   if pool = YTIMG_POOLS[subdomain]?
     return pool
   else
