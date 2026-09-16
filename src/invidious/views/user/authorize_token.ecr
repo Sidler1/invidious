@@ -30,7 +30,7 @@
     <div class="h-box">
         <form class="pure-form pure-form-aligned" action="/authorize_token" method="post">
             <% if callback_url %>
-                <legend><%= I18n.translate(locale, "Authorize token for `x`?", "#{callback_url.scheme}://#{callback_url.host}")  %></legend>
+                <legend><%= I18n.translate(locale, "Authorize token for `x`?", HTML.escape("#{callback_url.scheme}://#{callback_url.host}"))  %></legend>
             <% else %>
                 <legend><%= I18n.translate(locale, "Authorize token?") %></legend>
             <% end %>

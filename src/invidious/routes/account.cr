@@ -250,6 +250,10 @@ module Invidious::Routes::Account
       access_token = URI.encode_www_form(access_token)
       url = URI.parse(callback_url)
 
+      if !{"http", "https"}.includes?(url.scheme)
+        return error_template(400, "Invalid callback URL")
+      end
+
       if url.query
         query = HTTP::Params.parse(url.query.not_nil!)
       else
