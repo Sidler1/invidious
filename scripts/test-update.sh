@@ -47,4 +47,18 @@ if env "${common[@]}" HEALTH_URL="file:///nonexistent-health" bash "$here/update
 fi
 [ "$(readlink -f "$install_dir/current")" = "$first" ] || { echo "FAIL: rollback did not restore previous release"; exit 1; }
 
+echo "--- scenario 4: a failing switch still asks systemctl to start the service"
+install_dir4="$tmp/install4"
+mkdir -p "$install_dir4/current" && touch "$install_dir4/current/blocker"   # non-empty dir: mv -T onto it fails
+echo "hmac_key: test" > "$install_dir4/config.yml"
+fake_systemctl="$tmp/fake-systemctl"
+printf '#!/bin/sh\necho "$1 $2" >> "%s"\n' "$tmp/systemctl.log" > "$fake_systemctl"
+chmod +x "$fake_systemctl"
+rm -f "$tmp/systemctl.log"
+if env INSTALL_DIR="$install_dir4" RELEASE_BASE="file://$release_src" SYSTEMCTL="$fake_systemctl" REQUIRE_ATTESTATION=0 HEALTH_TIMEOUT=2 HEALTH_URL="file:///dev/null" bash "$here/update.sh"; then
+  echo "FAIL: update should have failed on the blocked switch"; exit 1
+fi
+grep -q "^stop invidious" "$tmp/systemctl.log" || { echo "FAIL: service was never stopped"; exit 1; }
+[ "$(tail -n 1 "$tmp/systemctl.log")" = "start invidious" ] || { echo "FAIL: trap did not restart the service"; exit 1; }
+
 echo "ALL OK"

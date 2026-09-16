@@ -87,8 +87,23 @@ healthy() {
   return 1
 }
 
+# Prune old releases, keeping the newest KEEP_RELEASES and never the active one.
+prune_old_releases() {
+  find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+    | sort -rn | tail -n +$((KEEP_RELEASES + 1)) | cut -d' ' -f2- \
+    | while read -r old; do
+        [ "$(readlink -f "$old")" = "$(readlink -f "$current_link")" ] && continue
+        log "Pruning $old"
+        rm -rf "$old"
+      done
+}
+
 log "Stopping $SERVICE..."
 "$SYSTEMCTL" stop "$SERVICE"
+# From here on, any abort must bring the service back up on whatever
+# `current` points at. Starting an already-running unit is a no-op, so the
+# trap stays installed for the rest of the run.
+trap '"$SYSTEMCTL" start "$SERVICE" || true; rm -rf "$workdir"' EXIT
 switch_to "$release_dir"
 log "Starting $SERVICE..."
 "$SYSTEMCTL" start "$SERVICE"
@@ -111,14 +126,7 @@ else
   die "Update failed."
 fi
 
-# Prune old releases, keeping the newest KEEP_RELEASES and never the active one.
-find "$INSTALL_DIR/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-  | sort -rn | tail -n +$((KEEP_RELEASES + 1)) | cut -d' ' -f2- \
-  | while read -r old; do
-      [ "$(readlink -f "$old")" = "$(readlink -f "$current_link")" ] && continue
-      log "Pruning $old"
-      rm -rf "$old"
-    done
+prune_old_releases || log "Pruning old releases failed (ignored)"
 
 log "Update complete."
 "$SYSTEMCTL" status "$SERVICE" --no-pager -n 20 || true
