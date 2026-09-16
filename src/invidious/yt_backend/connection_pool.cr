@@ -15,23 +15,31 @@ struct YoutubeConnectionPool
 
   def client(&)
     conn = pool.checkout
-    # Proxy needs to be reinstated every time we get a client from the pool
-    configure_proxy(conn) if CONFIG.http_proxy
+    discarded = false
 
     begin
+      # Proxy needs to be reinstated every time we get a client from the pool
+      configure_proxy(conn) if CONFIG.http_proxy
       response = yield conn
-    rescue ex
-      # The checked-out connection is likely broken; drop it from the pool
-      # and retry once with a fresh, pool-managed connection.
+    rescue ex : IO::Error | OpenSSL::Error
+      # Transport failure: the connection is broken. Replace it and retry
+      # the block once with a fresh, pool-managed connection.
       conn.close
       pool.delete(conn)
 
       conn = pool.checkout
-      conn.proxy = make_configured_http_proxy_client() if CONFIG.http_proxy
-
+      configure_proxy(conn) if CONFIG.http_proxy
       response = yield conn
+    rescue ex
+      # Application error (InfoException for a 4xx/5xx, JSON parse error, ...):
+      # never retry, so a failing upstream is not hit twice. The connection
+      # may be mid-response, so drop it instead of returning it to the pool.
+      conn.close
+      pool.delete(conn)
+      discarded = true
+      raise ex
     ensure
-      pool.release(conn)
+      pool.release(conn) unless discarded
     end
 
     response
