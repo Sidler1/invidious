@@ -25,7 +25,7 @@ module Invidious::Routes::VideoPlayback
     end
 
     # Sanity check, to avoid being used as an open proxy
-    if !host.matches?(/[\w-]+\.(?:googlevideo|c\.youtube)\.com/)
+    if !Invidious::ProxyHosts.valid_googlevideo_host?(host)
       return error_template(400, "Invalid \"host\" parameter.")
     end
 
@@ -56,6 +56,10 @@ module Invidious::Routes::VideoPlayback
 
         if response.headers["Location"]?
           location = URI.parse(response.headers["Location"])
+          if !Invidious::ProxyHosts.valid_googlevideo_redirect?(location)
+            LOGGER.warn("/videoplayback: refusing redirect to #{location.host.inspect}")
+            return error_template(502, "Invalid redirect from upstream.")
+          end
           env.response.headers["Access-Control-Allow-Origin"] = "*"
 
           new_host = "#{location.scheme}://#{location.host}"
@@ -64,8 +68,6 @@ module Invidious::Routes::VideoPlayback
             client.close
             client = make_client(URI.parse(new_host), region, force_resolve: true)
           end
-
-          url = "#{location.request_target}&host=#{location.host}#{region ? "&region=#{region}" : ""}"
         else
           break
         end
@@ -75,7 +77,11 @@ module Invidious::Routes::VideoPlayback
         end
         fvip = "3"
 
-        host = "https://r#{fvip}---#{mn}.googlevideo.com"
+        fallback_host = "r#{fvip}---#{mn}.googlevideo.com"
+        if !Invidious::ProxyHosts.valid_googlevideo_host?(fallback_host)
+          return error_template(400, "Invalid \"mn\" parameter.")
+        end
+        host = "https://#{fallback_host}"
         client = make_client(URI.parse(host), region, force_resolve: true)
       rescue ex
         error = ex.message
