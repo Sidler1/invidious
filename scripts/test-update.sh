@@ -16,6 +16,7 @@ echo "hmac_key: test" > "$install_dir/config.yml"
 printf '#!/bin/sh\necho fake-invidious\n' > "$release_src/dist/invidious"
 chmod +x "$release_src/dist/invidious"
 cp "$here/config/config.example.yml" "$release_src/dist/config/"
+cp "$here/invidious.service" "$release_src/dist/"
 tarball="invidious-x86_64-unknown-linux-gnu.tar.gz"
 tar -czf "$release_src/$tarball" -C "$release_src/dist" .
 ( cd "$release_src" && sha256sum "$tarball" > "$tarball.sha256" )
@@ -29,9 +30,11 @@ common=(
 )
 
 echo "--- scenario 1: fresh install succeeds"
-env "${common[@]}" HEALTH_URL="file:///dev/null" bash "$here/update.sh"
+mkdir -p "$tmp/systemd"
+env "${common[@]}" INSTALL_UNIT=1 UNIT_DIR="$tmp/systemd" HEALTH_URL="file:///dev/null" bash "$here/update.sh"
 [ -x "$install_dir/current/invidious" ] || { echo "FAIL: current/invidious missing"; exit 1; }
 [ "$(readlink "$install_dir/current/config/config.yml")" = "$install_dir/config.yml" ] || { echo "FAIL: config symlink"; exit 1; }
+[ -f "$tmp/systemd/invidious.service" ] || { echo "FAIL: unit not installed"; exit 1; }
 first="$(readlink -f "$install_dir/current")"
 
 echo "--- scenario 2: same release is a no-op"
@@ -39,7 +42,9 @@ out="$(env "${common[@]}" HEALTH_URL="file:///dev/null" bash "$here/update.sh")"
 echo "$out" | grep -q "Nothing to do" || { echo "FAIL: expected no-op"; exit 1; }
 
 echo "--- scenario 3: failing health check rolls back"
-echo "changed" >> "$release_src/dist/invidious"
+# A comment, not a bare word: the script must stay valid since update.sh
+# now runs it for `--migrate`.
+echo "# changed" >> "$release_src/dist/invidious"
 tar -czf "$release_src/$tarball" -C "$release_src/dist" .
 ( cd "$release_src" && sha256sum "$tarball" > "$tarball.sha256" )
 if env "${common[@]}" HEALTH_URL="file:///nonexistent-health" bash "$here/update.sh"; then

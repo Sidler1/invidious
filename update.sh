@@ -9,11 +9,13 @@
 #
 # One-time migration from the old in-place layout:
 #   mv $INSTALL_DIR/config/config.yml $INSTALL_DIR/config.yml
-#   install the updated invidious.service (paths point at .../current)
-#   systemctl daemon-reload
+#   the updated invidious.service (paths point at .../current) is installed
+#   automatically when running as root (or with INSTALL_UNIT=1)
 #
-# After starting the new release a health check runs; on failure the previous
-# release is restored. Requires: curl, tar, sha256sum, gh (for provenance).
+# Database migrations run automatically before switching to the new release
+# (set RUN_MIGRATIONS=0 to skip). After starting the new release a health
+# check runs; on failure the previous release is restored. Requires: curl,
+# tar, sha256sum, gh (for provenance).
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-/var/www/invidious}"
@@ -27,6 +29,9 @@ KEEP_RELEASES="${KEEP_RELEASES:-3}"
 REQUIRE_ATTESTATION="${REQUIRE_ATTESTATION:-1}"
 GITHUB_REPO="${GITHUB_REPO:-Sidler1/invidious}"
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+UNIT_DIR="${UNIT_DIR:-/etc/systemd/system}"
+if [ "$(id -u)" = 0 ]; then INSTALL_UNIT="${INSTALL_UNIT:-1}"; else INSTALL_UNIT="${INSTALL_UNIT:-0}"; fi
 
 log() { printf '[update] %s\n' "$*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
@@ -69,6 +74,14 @@ if [ "$(id -u)" = 0 ]; then
   chown -R "$SERVICE_USER:$SERVICE_USER" "$release_dir"
 fi
 
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+if [ "$RUN_MIGRATIONS" = "1" ]; then
+  log "Running database migrations..."
+  # Non-concurrent CREATE INDEX takes a SHARE lock on the table for its
+  # duration; the old release keeps serving reads meanwhile.
+  ( cd "$release_dir" && ./invidious --migrate ) || die "Migration failed; nothing was switched."
+fi
+
 previous="$(readlink -f "$current_link" 2>/dev/null || true)"
 
 switch_to() {
@@ -105,6 +118,15 @@ log "Stopping $SERVICE..."
 # trap stays installed for the rest of the run.
 trap '"$SYSTEMCTL" start "$SERVICE" || true; rm -rf "$workdir"' EXIT
 switch_to "$release_dir"
+
+if [ "$INSTALL_UNIT" = "1" ] && [ -f "$release_dir/invidious.service" ]; then
+  if ! cmp -s "$release_dir/invidious.service" "$UNIT_DIR/$SERVICE.service"; then
+    log "Installing updated $SERVICE.service unit..."
+    install -m 644 "$release_dir/invidious.service" "$UNIT_DIR/$SERVICE.service"
+    "$SYSTEMCTL" daemon-reload
+  fi
+fi
+
 log "Starting $SERVICE..."
 "$SYSTEMCTL" start "$SERVICE"
 
