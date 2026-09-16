@@ -68,9 +68,14 @@ class FilteredCompressHandler < HTTP::CompressHandler
   # Already-compressed asset types; gzipping them only costs CPU.
   INCOMPRESSIBLE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".webm"}
 
+  # True when the request path names an asset that must not be gzipped.
+  def self.incompressible?(path : String) : Bool
+    INCOMPRESSIBLE_EXTENSIONS.includes?(File.extname(path).downcase)
+  end
+
   def call(context)
     return call_next context if exclude_match? context
-    return call_next context if INCOMPRESSIBLE_EXTENSIONS.includes?(File.extname(context.request.path).downcase)
+    return call_next context if self.class.incompressible?(context.request.path)
     super
   end
 end
