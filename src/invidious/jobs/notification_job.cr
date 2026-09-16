@@ -44,10 +44,32 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
     end
   end
 
+  private LISTEN_RETRY_DELAY = 5.seconds
+
+  # Keeps a LISTEN connection open for the process lifetime. `blocking: true`
+  # runs the read loop in this fiber, so a dropped connection (PostgreSQL
+  # restart, failover, idle timeout) surfaces as an exception here and we
+  # reconnect instead of silently losing every SSE notification stream.
+  private def listen_forever(connections : Array(::Channel(PQ::Notification)))
+    loop do
+      begin
+        LOGGER.info("NotificationJob: opening LISTEN connection")
+        PG.connect_listen(pg_url, "notifications", blocking: true) do |event|
+          connections.each(&.send(event))
+        end
+        LOGGER.warn("NotificationJob: LISTEN connection closed")
+      rescue ex
+        LOGGER.error("NotificationJob: LISTEN connection failed: #{ex.class}: #{ex.message}")
+      end
+
+      sleep LISTEN_RETRY_DELAY
+    end
+  end
+
   def begin
     connections = [] of ::Channel(PQ::Notification)
 
-    PG.connect_listen(pg_url, "notifications") { |event| connections.each(&.send(event)) }
+    spawn { listen_forever(connections) }
 
     # hash of channels to their videos (id+published) that need notifying
     to_notify = Hash(String, Set(VideoNotification)).new(
