@@ -89,21 +89,28 @@ struct CompanionConnectionPool
 
   def client(&)
     wrapper = pool.checkout
+    discarded = false
 
     begin
       response = yield wrapper
     rescue ex : IO::Error | OpenSSL::Error
-      # Only transport failures mean the pooled connection is broken. Errors
-      # raised by the block for a well-formed reply propagate unchanged so a
-      # failing companion is not hit twice and a partially written response
-      # is never re-streamed.
+      # Transport failure: the connection is broken. Replace it and retry
+      # the block once with a fresh, pool-managed connection.
       wrapper.close
       pool.delete(wrapper)
 
       wrapper = pool.checkout
       response = yield wrapper
+    rescue ex
+      # Application error (InfoException, StreamAborted, ...): never retry,
+      # but the connection may be mid-response, so drop it instead of
+      # returning it to the pool.
+      wrapper.close
+      pool.delete(wrapper)
+      discarded = true
+      raise ex
     ensure
-      pool.release(wrapper)
+      pool.release(wrapper) unless discarded
     end
 
     response
