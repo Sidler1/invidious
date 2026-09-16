@@ -220,6 +220,34 @@ class Config
     end
   end
 
+  # Returns a human-readable description of the first setting that would only
+  # fail at runtime, or nil when everything is usable. Kept free of side
+  # effects so it can be unit-tested; `load` prints the result and exits.
+  def self.runtime_error(config : Config) : String?
+    if proxy = config.http_proxy
+      unless {"http", "socks5", "socks5h"}.includes?(proxy.type.downcase)
+        return "'http_proxy.type' must be one of http, socks5, socks5h (got #{proxy.type.inspect})"
+      end
+    end
+
+    if config.pool_size < 1
+      return "'pool_size' must be at least 1 (got #{config.pool_size})"
+    end
+
+    if config.channel_refresh_interval <= Time::Span.zero
+      return "'channel_refresh_interval' must be a positive duration such as 30m or 1h"
+    end
+
+    config.invidious_companion.each do |companion|
+      url = companion.private_url
+      if url.host.to_s.empty? || !{"http", "https"}.includes?(url.scheme)
+        return "'invidious_companion[].private_url' must be an absolute http(s) URL (got #{url.to_s.inspect})"
+      end
+    end
+
+    nil
+  end
+
   def self.load
     # Load config from file or YAML string env var
     env_config_file = "INVIDIOUS_CONFIG_FILE"
@@ -299,6 +327,11 @@ class Config
       end
     else
       puts("WARNING: Invidious companion is required to view and playback videos. For more information see https://docs.invidious.io/installation/")
+    end
+
+    if problem = runtime_error(config)
+      puts "Config: #{problem}"
+      exit(1)
     end
 
     # HMAC_key is mandatory
