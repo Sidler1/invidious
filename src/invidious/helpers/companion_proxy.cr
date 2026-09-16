@@ -53,4 +53,14 @@ module Invidious::CompanionProxy
     base = private_url.path.rchop("/")
     base + request_path.lchop("/companion")
   end
+
+  # Builds the browser-facing companion URL for a legacy stream/manifest
+  # redirect: the original query minus any client-supplied `check`, plus a
+  # freshly minted `check` token for `video_id`.
+  def stream_redirect(public_url : URI, path : String, query : URI::Params, video_id : String) : String
+    params = URI::Params.parse(query.to_s)
+    params.delete_all("check")
+    params["check"] = invidious_companion_encrypt(video_id)
+    "#{public_url}#{path}?#{params}"
+  end
 end
