@@ -6,20 +6,27 @@ on:
       - master
   workflow_dispatch:
 
-# The video.js assets / version constants are baked at compile time, so the
-# build needs network access and the full git history (fetch-depth: 0).
+# Two quick pushes must not race: the older build could finish last and
+# overwrite the newer assets on the rolling release.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+# Keep in sync with docker/Dockerfile (OPENSSL_VERSION / OPENSSL_SHA256).
 env:
-  OPENSSL_VERSION: "3.6.2"
-  OPENSSL_SHA256: "aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f"
+  OPENSSL_VERSION: "3.6.4"
+  OPENSSL_SHA256: "9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Setup repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -31,7 +38,7 @@ jobs:
           docker run --rm \
             -v "${PWD}":/src -w /src \
             -e OPENSSL_VERSION -e OPENSSL_SHA256 \
-            crystallang/crystal:1.20.2-alpine \
+            84codes/crystal:1.21.0-alpine \
             sh -eu scripts/build-static.sh
 
       - name: Assemble release tree
@@ -50,6 +57,11 @@ jobs:
           tar -czf invidious-x86_64-unknown-linux-gnu.tar.gz -C dist .
           # Publish a checksum so update.sh can verify integrity before extracting.
           sha256sum invidious-x86_64-unknown-linux-gnu.tar.gz > invidious-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: invidious-x86_64-unknown-linux-gnu.tar.gz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

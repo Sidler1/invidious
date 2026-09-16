@@ -14,8 +14,8 @@ set -eux
 # Fail a pipeline if any stage fails (e.g. the `... | sha256sum -c` check below).
 set -o pipefail
 
-OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.2}"
-OPENSSL_SHA256="${OPENSSL_SHA256:-aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f}"
+OPENSSL_VERSION="${OPENSSL_VERSION:-3.6.4}"
+OPENSSL_SHA256="${OPENSSL_SHA256:-9bffaa1ad1e07b354c21bd3324ec02fa15579f45a7d0494b3e74bc449b7333ef}"
 
 apk add --no-cache curl perl linux-headers sqlite-static yaml-static git tar
 
