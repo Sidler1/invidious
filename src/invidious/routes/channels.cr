@@ -238,7 +238,7 @@ module Invidious::Routes::Channels
 
     continuation = env.params.query["continuation"]?
 
-    if !channel.tabs.includes?("community")
+    if !channel.tabs.includes?("posts")
       return env.redirect "/channel/#{channel.ucid}"
     end
 
