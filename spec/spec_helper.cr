@@ -10,6 +10,9 @@ require "../src/invidious/videos"
 require "../src/invidious/playlists"
 require "../src/invidious/search/ctoken"
 require "../src/invidious/trending"
+
+CONFIG = Config.from_yaml(File.open("config/config.example.yml"))
+
 require "spectator"
 
 Spectator.configure do |config|
