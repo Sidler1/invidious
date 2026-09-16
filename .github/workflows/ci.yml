@@ -24,6 +24,10 @@ on:
       - .github/ISSUE_TEMPLATE/*
       - kubernetes/**
 
+      # Nix development files that are not used here.
+      - .envrc
+      - "nix/**"
+
 jobs:
   build:
 
@@ -44,13 +48,14 @@ jobs:
           - 1.17.1
           - 1.18.2
           - 1.19.2
-          - 1.20.2
+          - 1.20.3
+          - 1.21.0
         include:
           - crystal: nightly
             stable: false
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -65,7 +70,7 @@ jobs:
           crystal: ${{ matrix.crystal }}
 
       - name: Cache Shards
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ./lib
@@ -79,7 +84,7 @@ jobs:
           # job). This keeps the non-blocking nightly entry from breaking when
           # ameba can't compile against an unreleased Crystal.
           if ! shards check; then
-            shards install --skip-postinstall
+            shards install --skip-postinstall --skip-executables
           fi
 
       - name: Run tests
@@ -105,7 +110,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Build Docker
         run: docker compose build
@@ -133,7 +138,7 @@ jobs:
     continue-on-error: true
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
 
@@ -141,10 +146,10 @@ jobs:
         id: lint_step_install_crystal
         uses: crystal-lang/install-crystal@v1.9.2
         with:
-          crystal: latest
+          crystal: 1.20.3
 
       - name: Cache Shards
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ./lib

@@ -37,6 +37,11 @@ class Invidious::Jobs::RefreshChannelsJob < Invidious::Jobs::BaseJob
 
                 LOGGER.trace("RefreshChannelsJob: #{id} fiber : Updating DB")
                 Invidious::Database::Channels.update_author(id, channel.author)
+
+                if backoff > 2.minutes
+                  backoff /= 2
+                  LOGGER.debug("RefreshChannelsJob: #{id} fiber : decreasing backoff to #{backoff}s")
+                end
               rescue ex
                 LOGGER.error("RefreshChannelsJob: #{id} : #{ex.message}")
                 if ex.message == "Deleted or invalid channel"

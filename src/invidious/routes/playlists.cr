@@ -368,15 +368,25 @@ module Invidious::Routes::Playlists
       Invidious::Database::PlaylistVideos.insert(playlist_video)
       Invidious::Database::Playlists.update_video_added(playlist_id, playlist_video.index)
     when "remove_video"
-      index = env.params.query["set_video_id"]?
-      if index.nil? || index.empty?
+      raw_index = env.params.query["set_video_id"]?
+      if raw_index.nil? || raw_index.empty?
         if redirect
           return error_template(400, "Missing \"set_video_id\" parameter.")
         else
           return error_json(400, "Missing \"set_video_id\" parameter.")
         end
       end
-      Invidious::Database::PlaylistVideos.delete(index)
+
+      index = raw_index.to_i64?
+      if index.nil? || !playlist.index.includes? index
+        if redirect
+          return error_template(404, "Playlist does not contain index")
+        else
+          return error_json(404, "Playlist does not contain index")
+        end
+      end
+
+      Invidious::Database::PlaylistVideos.delete(index, playlist_id)
       Invidious::Database::Playlists.update_video_removed(playlist_id, index)
     when "move_video_before"
       # TODO: Playlist stub

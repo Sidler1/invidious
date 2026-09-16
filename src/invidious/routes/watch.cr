@@ -18,14 +18,8 @@ module Invidious::Routes::Watch
         return error_template(400, "Invalid parameters.")
       end
 
-      if id.size > 11
-        url = "/watch?v=#{id[0, 11]}"
-        env.params.query.delete_all("v")
-        if env.params.query.size > 0
-          url += "&#{env.params.query}"
-        end
-
-        return env.redirect url
+      unless validate_video_id(id)
+        return error_template(400, InvalidVideoID.new(id))
       end
     else
       return env.redirect "/"
@@ -79,7 +73,8 @@ module Invidious::Routes::Watch
 
     if nojs
       if preferences
-        source = preferences.comments[0]
+        source = video.comments? ? preferences.comments[0] : "reddit"
+
         if source.empty?
           source = preferences.comments[1]
         end
@@ -129,17 +124,20 @@ module Invidious::Routes::Watch
     video_streams = video.video_streams
     audio_streams = video.audio_streams
 
-    # Older videos may not have audio sources available.
-    # We redirect here so they're not unplayable
-    if audio_streams.empty? && !video.live_now
-      if params.quality == "dash"
-        env.params.query.delete_all("quality")
-        env.params.query["quality"] = "medium"
-        return env.redirect "/watch?#{env.params.query}"
-      elsif params.listen
-        env.params.query.delete_all("listen")
-        env.params.query["listen"] = "0"
-        return env.redirect "/watch?#{env.params.query}"
+    # Videos that are a premiere do not have audio streams.
+    if video.premiere_timestamp.nil?
+      # Older videos may not have audio sources available.
+      # We redirect here so they're not unplayable
+      if audio_streams.empty? && !video.live_now
+        if params.quality == "dash"
+          env.params.query.delete_all("quality")
+          env.params.query["quality"] = "medium"
+          return env.redirect "/watch?#{env.params.query}"
+        elsif params.listen
+          env.params.query.delete_all("listen")
+          env.params.query["listen"] = "0"
+          return env.redirect "/watch?#{env.params.query}"
+        end
       end
     end
 
@@ -231,7 +229,7 @@ module Invidious::Routes::Watch
     token = env.params.body["csrf_token"]?
 
     id = env.params.query["id"]?
-    if !id
+    unless id && validate_video_id(id)
       env.response.status_code = 400
       return
     end

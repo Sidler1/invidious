@@ -81,9 +81,10 @@ struct Video
   end
 
   def premiere_timestamp : Time?
-    info
-      .dig?("microformat", "playerMicroformatRenderer", "liveBroadcastDetails", "startTimestamp")
-      .try { |t| Time.parse_rfc3339(t.as_s) }
+    if self.video_type == VideoType::Scheduled
+      return info["published"]?
+        .try { |t| Time.parse_rfc3339(t.as_s) }
+    end
   end
 
   def related_videos
@@ -190,6 +191,11 @@ struct Video
         music_json["license"].as_s
       )
     }
+  end
+
+  # Returns true if comments are enabled on the video
+  def comments?
+    return info["commentsEnabled"].as_bool
   end
 
   # Macros defining getters/setters for various types of data

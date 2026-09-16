@@ -437,3 +437,10 @@ def invidious_companion_encrypt(data)
 
   return Base64.urlsafe_encode(io.to_slice)
 end
+
+def validate_video_id(id : String) : Bool
+  # This is the video ID regex. May be need to be changed
+  # if Youtube ever decides to add more characters to their
+  # video IDs.
+  /\A[a-zA-Z0-9_-]{11}\z/.matches?(id)
+end

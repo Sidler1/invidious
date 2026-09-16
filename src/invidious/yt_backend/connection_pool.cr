@@ -16,7 +16,7 @@ struct YoutubeConnectionPool
   def client(&)
     conn = pool.checkout
     # Proxy needs to be reinstated every time we get a client from the pool
-    conn.proxy = make_configured_http_proxy_client() if CONFIG.http_proxy
+    configure_proxy(conn) if CONFIG.http_proxy
 
     begin
       response = yield conn
@@ -107,24 +107,26 @@ struct CompanionConnectionPool
   end
 end
 
-def add_yt_headers(request)
+def add_yt_headers(request, no_cookies)
   request.headers.delete("User-Agent") if request.headers["User-Agent"] == "Crystal"
-  request.headers["User-Agent"] ||= "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+  request.headers["User-Agent"] ||= "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 
   request.headers["Accept-Charset"] ||= "ISO-8859-1,utf-8;q=0.7,*;q=0.7"
   request.headers["Accept"] ||= "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
   request.headers["Accept-Language"] ||= "en-us,en;q=0.5"
 
-  # Preserve original cookies and add new YT consent cookie for EU servers
-  request.headers["Cookie"] = "#{request.headers["cookie"]?}; CONSENT=PENDING+#{Random.rand(100..999)}"
-  if !CONFIG.cookies.empty?
-    request.headers["Cookie"] = "#{(CONFIG.cookies.map { |c| "#{c.name}=#{c.value}" }).join("; ")}; #{request.headers["cookie"]?}"
+  unless no_cookies
+    # Preserve original cookies and add new YT consent cookie for EU servers
+    request.headers["Cookie"] = "#{request.headers["cookie"]?}; CONSENT=PENDING+#{Random.rand(100..999)}"
+    if !CONFIG.cookies.empty?
+      request.headers["Cookie"] = "#{(CONFIG.cookies.map { |c| "#{c.name}=#{c.value}" }).join("; ")}; #{request.headers["cookie"]?}"
+    end
   end
 end
 
 def make_client(url : URI, region = nil, force_resolve : Bool = false, force_youtube_headers : Bool = false, use_http_proxy : Bool = true)
   client = HTTP::Client.new(url)
-  client.proxy = make_configured_http_proxy_client() if CONFIG.http_proxy && use_http_proxy
+  configure_proxy(client) if CONFIG.http_proxy && use_http_proxy
 
   # Force the usage of a specific configured IP Family
   if force_resolve
@@ -132,7 +134,16 @@ def make_client(url : URI, region = nil, force_resolve : Bool = false, force_you
     client.family = Socket::Family::INET if client.family == Socket::Family::UNSPEC
   end
 
-  client.before_request { |r| add_yt_headers(r) } if url.host.try &.ends_with?("youtube.com") || force_youtube_headers
+  # ytimg.com does not contain any cookies, so we skip the youtube cookies
+  # for that domain and subdomains (i9.ytimg.com, i.ytimg.com, etc)
+  yt = url.host.try { |host| host == "youtube.com" || host.ends_with?(".youtube.com") }
+  ytimg = url.host.try { |host| host == "ytimg.com" || host.ends_with?(".ytimg.com") }
+  youtube_domain = yt || ytimg
+
+  client.before_request do |r|
+    add_yt_headers(r, ytimg) if youtube_domain || force_youtube_headers
+  end
+
   client.read_timeout = 10.seconds
   client.connect_timeout = 10.seconds
 
@@ -145,6 +156,26 @@ def make_client(url : URI, region = nil, force_resolve : Bool = false, use_http_
     yield client
   ensure
     client.close
+  end
+end
+
+# Attaches the configured outbound proxy (HTTP CONNECT or SOCKS5) to a client.
+# Only called when an outbound proxy is configured.
+def configure_proxy(client : HTTP::Client) : Nil
+  config_proxy = CONFIG.http_proxy.not_nil!
+
+  case config_proxy.type.downcase
+  when "http"
+    client.proxy = make_configured_http_proxy_client
+  when "socks5", "socks5h"
+    client.socks_proxy = SOCKS5::ProxyClient.new(
+      config_proxy.host,
+      config_proxy.port,
+      username: config_proxy.user,
+      password: config_proxy.password,
+    )
+  else
+    raise %(Invalid http_proxy.type #{config_proxy.type.inspect} (expected "http", "socks5", or "socks5h"))
   end
 end
 
