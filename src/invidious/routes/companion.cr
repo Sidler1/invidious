@@ -1,60 +1,57 @@
 module Invidious::Routes::Companion
-  # GET /companion
+  # GET /companion/*
   def self.get_companion(env)
-    url = env.request.path
-    if env.request.query
-      url += "?#{env.request.query}"
-    end
-
-    begin
-      COMPANION_POOL.client do |wrapper|
-        wrapper.client.get(url, env.request.headers) do |resp|
-          return self.proxy_companion(env, resp)
-        end
-      end
-    rescue ex
+    proxy(env) do |wrapper, url, headers|
+      wrapper.client.get(url, headers) { |resp| proxy_companion(env, resp) }
     end
   end
 
-  # POST /companion
+  # POST /companion/*
   def self.post_companion(env)
-    url = env.request.path
-    if env.request.query
-      url += "?#{env.request.query}"
-    end
-
-    begin
-      COMPANION_POOL.client do |wrapper|
-        wrapper.client.post(url, env.request.headers, env.request.body) do |resp|
-          return self.proxy_companion(env, resp)
-        end
-      end
-    rescue ex
+    proxy(env) do |wrapper, url, headers|
+      wrapper.client.post(url, headers, env.request.body) { |resp| proxy_companion(env, resp) }
     end
   end
 
+  # OPTIONS /companion/*
   def self.options_companion(env)
-    url = env.request.path
-    if env.request.query
-      url += "?#{env.request.query}"
+    proxy(env) do |wrapper, url, headers|
+      wrapper.client.options(url, headers) { |resp| proxy_companion(env, resp) }
     end
+  end
 
-    begin
-      COMPANION_POOL.client do |wrapper|
-        wrapper.client.options(url, env.request.headers) do |resp|
-          return self.proxy_companion(env, resp)
-        end
+  # Checks out a companion connection, builds the upstream URL and filtered
+  # headers, and yields them. Any failure is logged and answered with 502
+  # instead of an empty 200.
+  private def self.proxy(env, &)
+    COMPANION_POOL.client do |wrapper|
+      url = Invidious::CompanionProxy.upstream_path(env.request.path, wrapper.companion.private_url)
+      if query = env.request.query
+        url += "?#{query}"
       end
-    rescue ex
+      headers = Invidious::CompanionProxy.request_headers(env.request.headers)
+
+      yield wrapper, url, headers
     end
+  rescue ex
+    LOGGER.error("/companion proxy: #{ex.class}: #{ex.message}")
+    bad_gateway(env)
+  end
+
+  private def self.bad_gateway(env)
+    env.response.status_code = 502
+    env.response.content_type = "text/plain"
+    env.response.print "Invidious companion is unreachable"
+  rescue
+    # Headers were already sent while streaming; nothing more can be done.
   end
 
   private def self.proxy_companion(env, response)
     env.response.status_code = response.status_code
     response.headers.each do |key, value|
-      env.response.headers[key] = value
+      env.response.headers[key] = value if Invidious::CompanionProxy.response_header_allowed?(key)
     end
 
-    return IO.copy response.body_io, env.response
+    IO.copy response.body_io, env.response
   end
 end
