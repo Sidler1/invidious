@@ -26,7 +26,20 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
   private getter connection_channel : ::Channel({Bool, ::Channel(PQ::Notification)})
   private getter pg_url : URI
 
+  @connections : Array(::Channel(PQ::Notification))
+  @to_notify : Hash(String, Set(VideoNotification))
+  @notify_mutex : Mutex
+  @workers_started : Bool
+
   def initialize(@notification_channel, @connection_channel, @pg_url)
+    @connections = [] of ::Channel(PQ::Notification)
+    @to_notify = Hash(String, Set(VideoNotification)).new(
+      ->(hash : Hash(String, Set(VideoNotification)), key : String) {
+        hash[key] = Set(VideoNotification).new
+      }
+    )
+    @notify_mutex = Mutex.new
+    @workers_started = false
   end
 
   # Hands a notification to the job without ever blocking the caller. If the
@@ -50,12 +63,18 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
   # runs the read loop in this fiber, so a dropped connection (PostgreSQL
   # restart, failover, idle timeout) surfaces as an exception here and we
   # reconnect instead of silently losing every SSE notification stream.
-  private def listen_forever(connections : Array(::Channel(PQ::Notification)))
+  private def listen_forever
     loop do
       begin
         LOGGER.info("NotificationJob: opening LISTEN connection")
         PG.connect_listen(pg_url, "notifications", blocking: true) do |event|
-          connections.each(&.send(event))
+          @connections.each do |connection|
+            select
+            when connection.send(event)
+            else
+              LOGGER.warn("NotificationJob: SSE client queue full, dropping event")
+            end
+          end
         end
         LOGGER.warn("NotificationJob: LISTEN connection closed")
       rescue ex
@@ -66,26 +85,20 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
     end
   end
 
-  def begin
-    connections = [] of ::Channel(PQ::Notification)
-
-    spawn { listen_forever(connections) }
-
-    # hash of channels to their videos (id+published) that need notifying
-    to_notify = Hash(String, Set(VideoNotification)).new(
-      ->(hash : Hash(String, Set(VideoNotification)), key : String) {
-        hash[key] = Set(VideoNotification).new
-      }
-    )
-    notify_mutex = Mutex.new
+  # Spawns the job's permanent worker fibers. Only ever called once per
+  # instance (guarded by `@workers_started` in `begin`) so a supervisor
+  # restart re-enters the registry loop below without duplicating fibers
+  # or opening a second LISTEN connection.
+  private def start_workers
+    spawn { listen_forever }
 
     # fiber to locally cache all incoming notifications (from pubsub webhooks and refresh channels job)
     spawn do
       loop do
         begin
           notification = notification_channel.receive
-          notify_mutex.synchronize do
-            to_notify[notification.channel_id] << notification
+          @notify_mutex.synchronize do
+            @to_notify[notification.channel_id] << notification
           end
         rescue ex
           LOGGER.error("NotificationJob: #{ex.message}")
@@ -98,9 +111,9 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
         begin
           LOGGER.debug("NotificationJob: waking up")
           cloned = {} of String => Set(VideoNotification)
-          notify_mutex.synchronize do
-            cloned = to_notify.clone
-            to_notify.clear
+          @notify_mutex.synchronize do
+            cloned = @to_notify.clone
+            @to_notify.clear
           end
 
           cloned.each do |channel_id, notifications|
@@ -136,15 +149,24 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
         Fiber.yield
       end
     end
+  end
 
+  def begin
+    unless @workers_started
+      @workers_started = true
+      start_workers
+    end
+
+    # Registry loop: a restart only re-enters this loop; the worker fibers
+    # above keep running and are never duplicated.
     loop do
       action, connection = connection_channel.receive
 
       case action
       when true
-        connections << connection
+        @connections << connection
       when false
-        connections.delete(connection)
+        @connections.delete(connection)
       end
     end
   end
