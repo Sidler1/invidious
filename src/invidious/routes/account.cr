@@ -208,9 +208,9 @@ module Invidious::Routes::Account
     scopes = env.params.query["scopes"]?.try &.split(",")
     scopes ||= [] of String
 
-    callback_url = env.params.query["callback_url"]?
-    if callback_url
-      callback_url = URI.parse(callback_url)
+    callback_url = env.params.query["callback_url"]?.try { |raw| URI.parse(raw) }
+    if callback_url && !{"http", "https"}.includes?(callback_url.scheme)
+      callback_url = nil
     end
 
     expire = env.params.query["expire"]?.try &.to_i?
