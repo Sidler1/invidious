@@ -40,4 +40,10 @@ Spectator.describe "Config.runtime_error" do
     config.invidious_companion = [Config::CompanionConfig.from_yaml("private_url: \"/companion\"")]
     expect(Config.runtime_error(config)).to contain("private_url")
   end
+
+  it "rejects a non-positive database pool size" do
+    config = example_config
+    config.database_pool_size = 0
+    expect(Config.runtime_error(config)).to contain("database_pool_size")
+  end
 end

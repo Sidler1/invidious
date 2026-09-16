@@ -170,6 +170,11 @@ class Config
   property socket_binding : SocketBindingConfig? = nil
   # Pool size for HTTP requests to youtube.com and ytimg.com (each domain has a separate pool of `pool_size`)
   property pool_size : Int32 = 100
+  # Maximum number of PostgreSQL connections Invidious keeps open. Applied to
+  # `database_url` as `max_pool_size` and `max_idle_pool_size` unless the URL
+  # already sets them. crystal-db's defaults (unlimited, one idle connection)
+  # open a fresh connection for almost every request under load.
+  property database_pool_size : Int32 = 20
   # HTTP Proxy configuration
   property http_proxy : HTTPProxyConfig? = nil
 
@@ -243,6 +248,10 @@ class Config
       if url.host.to_s.empty? || !{"http", "https"}.includes?(url.scheme)
         return "'invidious_companion[].private_url' must be an absolute http(s) URL (got #{url.to_s.inspect})"
       end
+    end
+
+    if config.database_pool_size < 1
+      return "'database_pool_size' must be at least 1 (got #{config.database_pool_size})"
     end
 
     nil
@@ -357,6 +366,12 @@ class Config
         exit(1)
       end
     end
+
+    # Apply pool limits unless the operator already set them in the URL.
+    db_params = URI::Params.parse(config.database_url.query || "")
+    db_params["max_pool_size"] = config.database_pool_size.to_s unless db_params.has_key?("max_pool_size")
+    db_params["max_idle_pool_size"] = config.database_pool_size.to_s unless db_params.has_key?("max_idle_pool_size")
+    config.database_url.query = db_params.to_s
 
     # Check if the socket configuration is valid
     if sb = config.socket_binding
