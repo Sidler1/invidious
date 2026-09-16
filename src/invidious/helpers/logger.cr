@@ -13,8 +13,10 @@ end
 
 class Invidious::LogHandler < Kemal::BaseLogHandler
   def initialize(@io : IO = STDOUT, @level = LogLevel::Debug, use_color : Bool = true)
-    Colorize.enabled = use_color
-    Colorize.on_tty_only!
+    # `Colorize.on_tty_only!` is deprecated since Crystal 1.17 and, on those
+    # versions, resets any explicit override (discarding `use_color`).
+    # Decide once here instead: colour only when requested and on a TTY.
+    Colorize.enabled = use_color && STDOUT.tty? && STDERR.tty?
   end
 
   def call(context : HTTP::Server::Context)
