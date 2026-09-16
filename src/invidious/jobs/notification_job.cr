@@ -26,6 +26,7 @@ class Invidious::Jobs::NotificationJob < Invidious::Jobs::BaseJob
   private getter connection_channel : ::Channel({Bool, ::Channel(PQ::Notification)})
   private getter pg_url : URI
 
+  # Mutated by the registry loop and iterated by the LISTEN fiber without a lock: safe under the single-threaded scheduler, would need a mutex under -Dpreview_mt.
   @connections : Array(::Channel(PQ::Notification))
   @to_notify : Hash(String, Set(VideoNotification))
   @notify_mutex : Mutex
