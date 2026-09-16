@@ -131,7 +131,7 @@ def error_atom_helper(env : HTTP::Server::Context, status_code : Int32, message 
   env.response.content_type = "application/atom+xml"
   env.response.status_code = status_code
 
-  return "<error>#{message}</error>"
+  return "<error>#{HTML.escape(message)}</error>"
 end
 
 # -------------------
