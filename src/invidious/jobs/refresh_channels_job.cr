@@ -16,7 +16,8 @@ class Invidious::Jobs::RefreshChannelsJob < Invidious::Jobs::BaseJob
       backoff = INITIAL_BACKOFF
       LOGGER.debug("RefreshChannelsJob: Refreshing all channels")
       begin
-        ids = PG_DB.query_all("SELECT id FROM channels WHERE deleted IS NOT TRUE ORDER BY updated", as: String)
+        # Channels marked deleted are retried once a day: the "Deleted or invalid channel" error is also raised on transient YouTube failures.
+        ids = PG_DB.query_all("SELECT id FROM channels WHERE deleted IS NOT TRUE OR updated < CURRENT_TIMESTAMP - interval '1 day' ORDER BY updated", as: String)
         ids.each do |id|
           if active_fibers >= max_fibers
             LOGGER.trace("RefreshChannelsJob: Fiber limit reached, waiting...")
