@@ -124,7 +124,7 @@ module Invidious::Database::Users
       UPDATE users
       SET notifications = array_cat(notifications, $1),
           feed_needs_update = true
-      WHERE $2 = ANY(subscriptions)
+      WHERE subscriptions @> ARRAY[$2::text]
     SQL
 
     PG_DB.exec(request, video_ids, channel_id)
@@ -158,7 +158,7 @@ module Invidious::Database::Users
     request = <<-SQL
       UPDATE users
       SET feed_needs_update = true
-      WHERE $1 = ANY(subscriptions)
+      WHERE subscriptions @> ARRAY[$1::text]
     SQL
 
     PG_DB.exec(request, channel_id)

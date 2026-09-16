@@ -27,3 +27,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS email_unique_idx
   USING btree
   (lower(email) COLLATE pg_catalog."default");
 
+CREATE INDEX IF NOT EXISTS users_token_idx
+  ON public.users USING btree (token);
+
+CREATE INDEX IF NOT EXISTS users_subscriptions_gin_idx
+  ON public.users USING gin (subscriptions);
+
+CREATE INDEX IF NOT EXISTS users_feed_needs_update_idx
+  ON public.users USING btree (email)
+  WHERE feed_needs_update = true OR feed_needs_update IS NULL;
+
