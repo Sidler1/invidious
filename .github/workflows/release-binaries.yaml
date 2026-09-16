@@ -28,6 +28,7 @@ jobs:
       - name: Setup repo
         uses: actions/checkout@v7
         with:
+          # The version constants are baked at compile time from git, so the build needs the full history.
           fetch-depth: 0
 
       # Compile a fully static (musl) binary using the official Crystal Alpine
