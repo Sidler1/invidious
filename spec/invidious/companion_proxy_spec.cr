@@ -23,7 +23,7 @@ Spectator.describe Invidious::CompanionProxy do
 
   describe ".response_header_allowed?" do
     it "blocks hop-by-hop and security headers" do
-      %w(Connection Transfer-Encoding Set-Cookie Content-Security-Policy Strict-Transport-Security).each do |name|
+      %w(Connection Transfer-Encoding Set-Cookie Content-Security-Policy Strict-Transport-Security Upgrade Trailer).each do |name|
         expect(described_class.response_header_allowed?(name)).to be_false
       end
     end

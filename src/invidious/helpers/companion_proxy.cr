@@ -27,10 +27,14 @@ module Invidious::CompanionProxy
     "connection",
     "content-security-policy",
     "keep-alive",
+    "proxy-authenticate",
     "server",
     "set-cookie",
     "strict-transport-security",
+    "te",
+    "trailer",
     "transfer-encoding",
+    "upgrade",
     "x-frame-options",
   }
 
