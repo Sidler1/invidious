@@ -10,7 +10,10 @@ class Invidious::Jobs::ClearExpiredItemsJob < Invidious::Jobs::BaseJob
       begin
         Invidious::Database::Videos.delete_expired
         Invidious::Database::Nonces.delete_expired
-      rescue DB::Error
+      rescue ex
+        # `PQ::PQError` (server-side errors) is not a `DB::Error`, so anything
+        # narrower than a catch-all would kill this job for the process lifetime.
+        LOGGER.error("jobs: ClearExpiredItems: #{ex.class}: #{ex.message}")
         failed = true
       end
 
