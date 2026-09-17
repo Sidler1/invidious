@@ -283,13 +283,20 @@ module Invidious::Routes::API::V1::Videos
 
         file = URI.encode_www_form("#{video_id[0, 3]}/#{video_id}.xml")
 
-        location = make_client(INTERNET_ARCHIVE_URL, &.get("/download/youtubeannotations_#{index}/#{video_id[0, 2]}.tar/#{file}"))
+        begin
+          location = make_client(INTERNET_ARCHIVE_URL, &.get("/download/youtubeannotations_#{index}/#{video_id[0, 2]}.tar/#{file}"))
 
-        if !location.headers["Location"]?
-          haltf env, location.status_code
+          if !location.headers["Location"]?
+            haltf env, location.status_code
+          end
+
+          response = make_client(URI.parse(location.headers["Location"]), &.get(location.headers["Location"]))
+        rescue ex : IO::Error
+          # archive.org is an external best-effort source; timeouts and
+          # connection failures are expected and not worth a backtrace.
+          LOGGER.warn("annotations: archive.org unreachable for #{video_id}: #{ex.message}")
+          haltf env, 502
         end
-
-        response = make_client(URI.parse(location.headers["Location"]), &.get(location.headers["Location"]))
 
         if response.body.empty?
           haltf env, 404

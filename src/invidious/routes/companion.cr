@@ -40,9 +40,17 @@ module Invidious::Routes::Companion
       yield wrapper, url, headers
     end
   rescue ex : StreamAborted
-    LOGGER.error("/companion proxy: #{ex.message}: #{ex.cause.try(&.message)}")
+    if Invidious::CompanionProxy.client_disconnect?(ex)
+      LOGGER.debug("/companion proxy: client disconnected mid-stream: #{ex.cause.try(&.message)}")
+    else
+      LOGGER.error("/companion proxy: #{ex.message}: #{ex.cause.try(&.message)}")
+    end
   rescue ex
-    LOGGER.error("/companion proxy: #{ex.class}: #{ex.message}")
+    if Invidious::CompanionProxy.client_disconnect?(ex)
+      LOGGER.debug("/companion proxy: client disconnected: #{ex.message}")
+    else
+      LOGGER.error("/companion proxy: #{ex.class}: #{ex.message}")
+    end
     bad_gateway(env)
   end
 

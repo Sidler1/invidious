@@ -89,7 +89,7 @@ module Invidious::Routes::API::V1::Misc
 
     if format == "html"
       playlist_html = template_playlist(json_response, listen)
-      index, next_video = json_response["videos"].as_a.skip(1 + lookback).select { |video| !video["author"].as_s.empty? }[0]?.try { |v| {v["index"], v["videoId"]} } || {nil, nil}
+      index, next_video = json_response["videos"].as_a.skip(1 + lookback).select { |video| playable_entry?(video) }[0]?.try { |v| {v["index"], v["videoId"]} } || {nil, nil}
 
       response = {
         "playlistHtml" => playlist_html,
@@ -162,7 +162,7 @@ module Invidious::Routes::API::V1::Misc
     if format == "html"
       response = JSON.parse(response)
       playlist_html = template_mix(response, listen)
-      next_video = response["videos"].as_a.select { |video| !video["author"].as_s.empty? }[0]?.try &.["videoId"]
+      next_video = response["videos"].as_a.select { |video| playable_entry?(video) }[0]?.try &.["videoId"]
 
       response = {
         "playlistHtml" => playlist_html,
@@ -171,6 +171,14 @@ module Invidious::Routes::API::V1::Misc
     end
 
     response
+  end
+
+  # A playlist/mix entry that can be played next: has a video id and an
+  # author (parse failures have neither, deleted videos have no author).
+  private def self.playable_entry?(video : JSON::Any) : Bool
+    return false if !video["videoId"]?
+
+    !(video["author"]?.try(&.as_s) || "").empty?
   end
 
   # resolve channel and clip urls, return the UCID

@@ -98,6 +98,8 @@ def template_mix(mix, listen)
   END_HTML
 
   mix["videos"].as_a.each do |video|
+    next if !video["videoId"]?
+
     html += <<-END_HTML
       <li class="pure-menu-item">
         <a href="/watch?v=#{video["videoId"]}&list=#{mix["mixId"]}#{listen ? "&listen=1" : ""}">

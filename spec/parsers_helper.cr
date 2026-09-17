@@ -11,6 +11,8 @@ require "../src/invidious/helpers/macros"
 require "../src/invidious/helpers/logger"
 require "../src/invidious/helpers/utils"
 
+alias IV = Invidious
+
 require "../src/invidious/videos"
 require "../src/invidious/videos/*"
 require "../src/invidious/comments/content"
@@ -19,8 +21,9 @@ require "../src/invidious/helpers/serialized_yt_data"
 require "../src/invidious/yt_backend/extractors"
 require "../src/invidious/yt_backend/extractors_utils"
 
-OUTPUT = File.open(File::NULL, "w")
-LOGGER = Invidious::LogHandler.new(OUTPUT, LogLevel::Off)
+HOST_URL = "http://localhost:3000"
+OUTPUT   = File.open(File::NULL, "w")
+LOGGER   = Invidious::LogHandler.new(OUTPUT, LogLevel::Off)
 
 def load_mock(file) : Hash(String, JSON::Any)
   file = File.join(__DIR__, "..", "mocks", file + ".json")

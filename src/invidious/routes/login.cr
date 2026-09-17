@@ -34,6 +34,8 @@ module Invidious::Routes::Login
       return error_template(403, "Login has been disabled by administrator.")
     end
 
+    haltf env, 400 if !form_body_valid?(env.params)
+
     # https://stackoverflow.com/a/574698
     email = env.params.body["email"]?.try &.downcase.byte_slice(0, 254)
     password = env.params.body["password"]?

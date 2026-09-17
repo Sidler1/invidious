@@ -50,6 +50,19 @@ module Invidious::CompanionProxy
     !RESPONSE_HEADERS_DENYLIST.includes?(name.downcase)
   end
 
+  # True when the failure is the browser going away (seek, pause, closed
+  # tab): `HTTP::Server::Response` raises `ClientError` when it cannot write
+  # to the client, and the proxy wraps that in `StreamAborted`. Such aborts
+  # are routine and must not be logged as errors.
+  def client_disconnect?(ex : Exception) : Bool
+    current : Exception? = ex
+    while current
+      return true if current.is_a?(HTTP::Server::ClientError)
+      current = current.cause
+    end
+    false
+  end
+
   # Maps the public `/companion/...` path onto the companion's configured
   # base path (`private_url.path`), mirroring what `_post_invidious_companion`
   # does for the player request.

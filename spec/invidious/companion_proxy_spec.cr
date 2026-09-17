@@ -67,4 +67,21 @@ Spectator.describe Invidious::CompanionProxy do
       expect(result.scan("check=").size).to eq(1)
     end
   end
+
+  describe ".client_disconnect?" do
+    it "is true when the client connection failed, even when wrapped" do
+      client_error = HTTP::Server::ClientError.new("Error while writing data to the client", IO::Error.new("Broken pipe"))
+      wrapped = Exception.new("companion response aborted mid-stream", cause: client_error)
+
+      expect(described_class.client_disconnect?(client_error)).to be_true
+      expect(described_class.client_disconnect?(wrapped)).to be_true
+    end
+
+    it "is false for companion-side failures" do
+      upstream = Exception.new("aborted", cause: IO::Error.new("Connection reset by peer"))
+
+      expect(described_class.client_disconnect?(upstream)).to be_false
+      expect(described_class.client_disconnect?(Socket::ConnectError.new("refused"))).to be_false
+    end
+  end
 end

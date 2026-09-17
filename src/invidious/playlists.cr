@@ -553,6 +553,10 @@ def template_playlist(playlist, listen)
   END_HTML
 
   playlist["videos"].as_a.each do |video|
+    # Parse failures are serialized as `{"type": "parse-error", ...}` and
+    # carry no video data.
+    next if !video["videoId"]?
+
     html += <<-END_HTML
       <li class="pure-menu-item" id="#{video["videoId"]}">
         <a href="/watch?v=#{video["videoId"]}&list=#{playlist["playlistId"]}&index=#{video["index"]}#{listen ? "&listen=1" : ""}">
