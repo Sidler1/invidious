@@ -17,6 +17,39 @@ module Invidious::Routes::API::Manifest
       return env.redirect Invidious::CompanionProxy.stream_redirect(invidious_companion.public_url, "/api/manifest/dash/id/#{id}", env.params.query, id)
     end
 
+    # ---------------------------------------------------------------------
+    # Everything below this line predates Invidious companion and cannot run
+    # in any configuration that is able to play video. Do not treat it as a
+    # no-companion fallback: there is no such thing.
+    #
+    # Why it cannot run: with a companion configured, the block above
+    # redirects and never reaches here. Without one, `YoutubeAPI.player`
+    # returns nil (yt_backend/youtube_api.cr), so `extract_video_info`
+    # returns nil and `fetch_video` raises - and `streamingData` is the only
+    # source of stream URLs in this codebase, so no route can produce a
+    # playable URL at all. `Config.load` says as much at startup when no
+    # companion is set: "Invidious companion is required to view and playback
+    # videos" (config.cr).
+    #
+    # The one window in which this code does execute: for up to ten minutes
+    # after an administrator removes a working companion, `get_video`
+    # (videos.cr) still serves an already-cached `videos` row without calling
+    # `fetch_video`, and that row's stream URLs reach the manifest below.
+    # Outside that window every request here ends in the 403 a few lines down.
+    #
+    # It is a PAIR. `Routes::VideoPlayback.latest_version`
+    # (routes/video_playback.cr) has the identical shape - companion redirect
+    # on top, pre-companion body underneath - and the same reasoning applies
+    # to it. If you are removing one, remove both, or leave a reader with one
+    # gone and one kept and no way to tell which is the rule.
+    #
+    # This is also a PUBLIC API SURFACE, not just an internal path: the
+    # `dashUrl` field of /api/v1/videos/:id (jsonify/api_v1/video_json.cr)
+    # hands this endpoint to third-party clients, so whatever it answers -
+    # today a redirect, or a 403 with no companion - is part of the API
+    # contract and cannot be changed by accident.
+    # ---------------------------------------------------------------------
+
     # Since some implementations create playlists based on resolution regardless of different codecs,
     # we can opt to only add a source to a representation if it has a unique height within that representation
     unique_res = env.params.query["unique_res"]?.try { |q| (q == "true" || q == "1").to_unsafe }
