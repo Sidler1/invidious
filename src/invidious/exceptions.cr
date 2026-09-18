@@ -31,14 +31,6 @@ end
 class NotFoundException < InfoException
 end
 
-class VideoNotAvailableException < Exception
-end
-
-# Exception used to indicate that the JSON response from YT is missing
-# some important informations, and that the query should be sent again.
-class RetryOnceException < Exception
-end
-
 # Exception for invalid video IDs.
 class InvalidVideoID < InfoException
   getter id : String?
