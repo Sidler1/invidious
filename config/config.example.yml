@@ -63,6 +63,18 @@ db:
 ## The parameter private_url is required for the internal communication
 ## between Invidious companion and Invidious.
 ##
+## Path constraints on private_url (Config.companion_path_warning prints a
+## startup WARNING when either is violated):
+## - Do NOT end the path with a trailing slash. YoutubeAPI._post_invidious_companion
+##   concatenates private_url.path with the endpoint (e.g. /youtubei/v1/player),
+##   so a trailing slash produces a doubled slash and that player request 404s
+##   on every video, while the built-in /companion proxy (which strips the
+##   trailing slash) keeps working.
+## - When public_url is omitted, Invidious proxies the companion under its own
+##   HARDCODED "/companion" prefix (Routing.register_companion_routes). The
+##   companion must therefore run with SERVER_BASE_PATH="/companion", or you
+##   must set public_url so browsers reach the companion directly.
+##
 ## The optional parameter public_url is the public URL from which
 ## Invidious companion is listening to the requests from the user(s).
 ## When this setting is commented out, Invidious proxy all requests to
@@ -73,7 +85,20 @@ db:
 ## Read the post-install documentation for advanced reverse proxy
 ## documentation: https://docs.invidious.io/installation/#post-install-configuration
 ##
-## Accepted values: "http(s)://<IP-HOSTNAME>:<Port>"
+## Rate-limiter trap (companion-side, noted here because an Invidious operator
+## typically only reads this file): the companion has an optional inbound
+## per-client-IP token bucket (default OFF; see the companion's
+## config.example.toml [server.rate_limit] / SERVER_RATE_LIMIT_ENABLED). With
+## Invidious's built-in /companion/* proxy, every browser request reaches the
+## companion from Invidious's own backend IP. CompanionProxy::REQUEST_HEADERS_ALLOWLIST
+## deliberately forwards no X-Forwarded-For, so enabling the companion's
+## trust_proxy cannot recover the real client IP. Net effect behind the
+## built-in proxy: one shared bucket for the whole instance. Only enable the
+## companion's rate limiter when browsers (or a reverse proxy you control that
+## forwards X-Forwarded-For, with trust_proxy = true) reach the companion
+## directly via public_url.
+##
+## Accepted values: "http(s)://<IP-HOSTNAME>:<Port>/<path>"
 ## Default: <none>
 ##
 #invidious_companion:
@@ -84,14 +109,15 @@ db:
 ##
 ## API key for Invidious companion, used for securing the communication
 ## between Invidious and Invidious companion.
-## The key needs to be exactly 16 characters long.
+## The key must be exactly 16 alphanumeric characters (a-z, A-Z, 0-9),
+## matching the companion's SERVER_SECRET_KEY requirement.
 ##
 ## Note: This parameter is mandatory when Invidious companion is enabled
 ## and should be a random string.
 ## Such random string can be generated on linux with the following
 ## command: `pwgen 16 1`
 ##
-## Accepted values: a string (of length 16)
+## Accepted values: 16 alphanumeric characters (a-z, A-Z, 0-9)
 ## Default: <none>
 ##
 #invidious_companion_key: "CHANGE_ME!!"
