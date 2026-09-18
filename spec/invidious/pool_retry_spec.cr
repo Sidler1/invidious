@@ -21,6 +21,22 @@ private class StaleConnection
   end
 end
 
+# Models a connection whose peer is alive but slow: the read times out
+# while the companion (or YouTube) is still working on the request. The
+# socket is not dead, so a "reconnect" does not make the answer arrive any
+# sooner -- it only throws away the work already in flight.
+private class SlowConnection
+  getter attempts = 0
+
+  def request : String
+    @attempts += 1
+    raise IO::TimeoutError.new("Read timed out")
+  end
+
+  def close : Nil
+  end
+end
+
 private class AppError < Exception
 end
 
@@ -36,6 +52,16 @@ Spectator.describe "Invidious::PoolRetry.transport_failure?" do
 
   it "is false for an application error" do
     expect(Invidious::PoolRetry.transport_failure?(AppError.new("non 200"))).to be_false
+  end
+
+  # A read timeout is an `IO::Error` subclass, so the plain `is_a?(IO::Error)`
+  # test used to classify it as a broken connection. It is not one: the peer
+  # accepted the request and may still be working on it.
+  it "is false for a read timeout, even though it is an IO::Error" do
+    ex = IO::TimeoutError.new("Read timed out")
+
+    expect(ex).to be_a(IO::Error)
+    expect(Invidious::PoolRetry.transport_failure?(ex)).to be_false
   end
 end
 
@@ -83,6 +109,20 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
     end.to raise_error(IO::EOFError)
 
     expect(conn.attempts).to eq(2)
+  end
+
+  # Replaying a timed-out request makes a slow peer do the expensive work a
+  # second time and doubles the time the user waits before the error.
+  it "never retries a request that timed out" do
+    conn = SlowConnection.new
+    reconnects = 0
+
+    expect do
+      Invidious::PoolRetry.with_reconnect(-> { reconnects += 1; conn.close }) { conn.request }
+    end.to raise_error(IO::TimeoutError)
+
+    expect(conn.attempts).to eq(1)
+    expect(reconnects).to eq(0)
   end
 
   it "never retries an application error" do
