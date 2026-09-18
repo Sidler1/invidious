@@ -280,6 +280,32 @@ module Invidious::Routes::VideoPlayback
       return env.redirect Invidious::CompanionProxy.stream_redirect(invidious_companion.public_url, "/latest_version", env.params.query, id)
     end
 
+    # ---------------------------------------------------------------------
+    # Everything below this line predates Invidious companion and cannot run
+    # in any configuration that is able to play video. Do not treat it as a
+    # no-companion fallback: there is no such thing.
+    #
+    # Why it cannot run: with a companion configured, the block above
+    # redirects and never reaches here. Without one, `YoutubeAPI.player`
+    # returns nil (yt_backend/youtube_api.cr), so `extract_video_info`
+    # returns nil and `fetch_video` raises - and `streamingData` is the only
+    # source of stream URLs in this codebase, so no route can produce a
+    # playable URL at all. `Config.load` says as much at startup when no
+    # companion is set: "Invidious companion is required to view and playback
+    # videos" (config.cr).
+    #
+    # The one window in which this code does execute: for up to ten minutes
+    # after an administrator removes a working companion, `get_video`
+    # (videos.cr) still serves an already-cached `videos` row without calling
+    # `fetch_video`, and that row's stream URLs reach the itag lookup below.
+    #
+    # It is a PAIR. `Routes::API::Manifest.get_dash_video_id`
+    # (routes/api/manifest.cr) has the identical shape - companion redirect
+    # on top, pre-companion body underneath - and the same reasoning applies
+    # to it. If you are removing one, remove both, or leave a reader with one
+    # gone and one kept and no way to tell which is the rule.
+    # ---------------------------------------------------------------------
+
     id = env.params.query["id"]?
     itag = env.params.query["itag"]?.try &.to_i?
 
