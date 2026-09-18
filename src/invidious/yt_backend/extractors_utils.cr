@@ -68,19 +68,6 @@ rescue ex
   return false
 end
 
-# This function extracts SearchVideo items from a Category.
-# Categories are commonly returned in search results and trending pages.
-def extract_category(category : Category) : Array(SearchVideo)
-  return category.contents.select(SearchVideo)
-end
-
-# :ditto:
-def extract_category(category : Category, &)
-  category.contents.select(SearchVideo).each do |item|
-    yield item
-  end
-end
-
 def extract_selected_tab(tabs)
   # Extract the selected tab from the array of tabs Youtube returns
   return tabs.as_a.select(&.["tabRenderer"]?.try &.["selected"]?.try &.as_bool)[0]["tabRenderer"]
