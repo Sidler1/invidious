@@ -470,6 +470,7 @@
     "search_filters_apply_button": "Apply selected filters",
     "Current version: ": "Current version: ",
     "Error while communicating with Invidious companion": "Error while communicating with Invidious companion",
+    "Error while communicating with YouTube": "Error while communicating with YouTube",
     "next_steps_error_message": "After which you should try to: ",
     "next_steps_error_message_refresh": "Refresh",
     "next_steps_error_message_go_to_youtube": "Go to YouTube",

@@ -18,35 +18,20 @@ struct YoutubeConnectionPool
     discarded = false
 
     begin
-      # Proxy needs to be reinstated every time we get a client from the pool
-      configure_proxy(conn) if CONFIG.http_proxy
-      response = yield conn
-    rescue ex : IO::Error | OpenSSL::Error
-      # Transport failure: the connection is broken. Replace it and retry
-      # the block once with a fresh, pool-managed connection.
-      discard(conn)
-      begin
-        conn = pool.checkout
-      rescue ex
-        # Nothing is checked out any more; ensure must not release the
-        # connection we just discarded.
-        discarded = true
-        raise ex
-      end
-
-      begin
+      # A transport failure means the pooled connection was closed by the
+      # peer while it sat idle. `close` drops that dead socket so the retry
+      # opens a fresh one; taking another idle connection out of the pool
+      # would not help, as it went stale during the same idle period.
+      response = Invidious::PoolRetry.with_reconnect(-> { conn.close }) do
+        # Proxy needs to be reinstated every time we get a client from the pool
         configure_proxy(conn) if CONFIG.http_proxy
-        response = yield conn
-      rescue ex
-        # The retry failed as well: never return that connection to the pool.
-        discard(conn)
-        discarded = true
-        raise ex
+        yield conn
       end
     rescue ex
-      # Application error (InfoException for a 4xx/5xx, JSON parse error, ...):
-      # never retry, so a failing upstream is not hit twice. The connection
-      # may be mid-response, so drop it instead of returning it to the pool.
+      # Either an application error (InfoException for a 4xx/5xx, JSON parse
+      # error, ...), which is never retried so a failing upstream is not hit
+      # twice, or a retry that failed as well. The connection may be
+      # mid-response, so drop it instead of returning it to the pool.
       discard(conn)
       discarded = true
       raise ex
@@ -117,32 +102,17 @@ struct CompanionConnectionPool
     discarded = false
 
     begin
-      response = yield wrapper
-    rescue ex : IO::Error | OpenSSL::Error
-      # Transport failure: the connection is broken. Replace it and retry
-      # the block once with a fresh, pool-managed connection.
-      discard(wrapper)
-      begin
-        wrapper = pool.checkout
-      rescue ex
-        # Nothing is checked out any more; ensure must not release the
-        # connection we just discarded.
-        discarded = true
-        raise ex
-      end
-
-      begin
-        response = yield wrapper
-      rescue ex
-        # The retry failed as well: never return that connection to the pool.
-        discard(wrapper)
-        discarded = true
-        raise ex
+      # See `YoutubeConnectionPool#client`: reconnect the connection we hold
+      # rather than swapping in another idle one that is just as likely to
+      # have been closed by the companion while idle.
+      response = Invidious::PoolRetry.with_reconnect(-> { wrapper.close }) do
+        yield wrapper
       end
     rescue ex
-      # Application error (InfoException, StreamAborted, ...): never retry,
-      # but the connection may be mid-response, so drop it instead of
-      # returning it to the pool.
+      # Either an application error (InfoException, StreamAborted, ...),
+      # which is never retried, or a retry that failed as well. The
+      # connection may be mid-response, so drop it instead of returning it
+      # to the pool.
       discard(wrapper)
       discarded = true
       raise ex

@@ -606,15 +606,25 @@ module YoutubeAPI
     LOGGER.trace("YoutubeAPI: POST data: #{data}")
 
     # Send the POST request
-    body = YT_POOL.client() do |client|
-      client.post(url, headers: headers, body: data.to_json) do |response|
-        if response.status_code != 200
-          raise InfoException.new("Error: non 200 status code. Youtube API returned \
-            status code #{response.status_code}. See <a href=\"https://docs.invidious.io/youtube-errors-explained/\"> \
-            https://docs.invidious.io/youtube-errors-explained/</a> for troubleshooting.")
+    begin
+      body = YT_POOL.client() do |client|
+        client.post(url, headers: headers, body: data.to_json) do |response|
+          if response.status_code != 200
+            raise InfoException.new("Error: non 200 status code. Youtube API returned \
+              status code #{response.status_code}. See <a href=\"https://docs.invidious.io/youtube-errors-explained/\"> \
+              https://docs.invidious.io/youtube-errors-explained/</a> for troubleshooting.")
+          end
+          self._decompress(response.body_io, response.headers["Content-Encoding"]?)
         end
-        self._decompress(response.body_io, response.headers["Content-Encoding"]?)
       end
+    rescue ex : IO::Error | OpenSSL::Error
+      # The connection broke before YouTube answered. The pool already
+      # retried once on a freshly opened connection, so this is an outage or
+      # a network fault rather than a stale pooled connection: transient, and
+      # not something the user should see a backtrace for. Mirrors how
+      # `_post_invidious_companion` reports an unreachable companion.
+      LOGGER.warn("YoutubeAPI: #{endpoint} unreachable: #{ex.class}: #{ex.message}")
+      raise InfoException.new("Error while communicating with YouTube")
     end
 
     # Convert result to Hash
