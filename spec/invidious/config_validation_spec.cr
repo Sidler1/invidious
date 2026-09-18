@@ -46,4 +46,31 @@ Spectator.describe "Config.runtime_error" do
     config.database_pool_size = 0
     expect(Config.runtime_error(config)).to contain("database_pool_size")
   end
+
+  it "accepts a 16-character alphanumeric companion key" do
+    config = example_config
+    config.invidious_companion = [Config::CompanionConfig.from_yaml("private_url: \"http://localhost:8282/companion\"")]
+    config.invidious_companion_key = "aA0bB1cC2dD3eE4f"
+    expect(Config.runtime_error(config)).to be_nil
+  end
+
+  it "rejects a companion key that is not 16 characters" do
+    config = example_config
+    config.invidious_companion = [Config::CompanionConfig.from_yaml("private_url: \"http://localhost:8282/companion\"")]
+    config.invidious_companion_key = "tooshort"
+    expect(Config.runtime_error(config)).to contain("invidious_companion_key")
+  end
+
+  it "rejects a 16-character companion key containing non-alphanumeric characters" do
+    config = example_config
+    config.invidious_companion = [Config::CompanionConfig.from_yaml("private_url: \"http://localhost:8282/companion\"")]
+    config.invidious_companion_key = "abcd1234!$%&5678"
+    expect(Config.runtime_error(config)).to contain("invidious_companion_key")
+  end
+
+  it "does not check the companion key when no companion is configured" do
+    config = example_config
+    config.invidious_companion_key = "not a valid key"
+    expect(Config.runtime_error(config)).to be_nil
+  end
 end

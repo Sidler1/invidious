@@ -250,6 +250,13 @@ class Config
       end
     end
 
+    # Mirrors the companion's SERVER_SECRET_KEY validation: a key that the
+    # companion would refuse must not pass Invidious startup.
+    if config.invidious_companion.present? && !config.invidious_companion_key.matches?(/\A[a-zA-Z0-9]{16}\z/)
+      return "'invidious_companion_key' must be exactly 16 alphanumeric characters (a-z, A-Z, 0-9), " \
+             "matching the companion's SERVER_SECRET_KEY requirement; generate one with 'pwgen 16 1'"
+    end
+
     if config.database_pool_size < 1
       return "'database_pool_size' must be at least 1 (got #{config.database_pool_size})"
     end
@@ -322,10 +329,8 @@ class Config
       elsif config.invidious_companion_key == "CHANGE_ME!!"
         puts "Config: The value of 'invidious_companion_key' needs to be changed!!"
         exit(1)
-      elsif config.invidious_companion_key.size != 16
-        puts "Config: The value of 'invidious_companion_key' needs to be a size of 16 characters."
-        exit(1)
       end
+      # Key format (16 alphanumeric characters) is enforced in runtime_error below.
 
       # Set public_url to built-in proxy path when omitted
       config.invidious_companion.each do |companion|
