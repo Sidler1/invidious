@@ -44,7 +44,7 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
     conn = StaleConnection.new(stale: false)
     reconnects = 0
 
-    result = Invidious::PoolRetry.with_reconnect(->{ reconnects += 1; nil }) { conn.request }
+    result = Invidious::PoolRetry.with_reconnect(-> { reconnects += 1; nil }) { conn.request }
 
     expect(result).to eq("response")
     expect(conn.attempts).to eq(1)
@@ -59,7 +59,7 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
   it "reconnects the held connection and succeeds on the retry" do
     conn = StaleConnection.new(stale: true)
 
-    result = Invidious::PoolRetry.with_reconnect(->{ conn.close }) { conn.request }
+    result = Invidious::PoolRetry.with_reconnect(-> { conn.close }) { conn.request }
 
     expect(result).to eq("response")
     expect(conn.attempts).to eq(2)
@@ -69,7 +69,7 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
     conn = StaleConnection.new(stale: true)
     reconnects = 0
 
-    Invidious::PoolRetry.with_reconnect(->{ reconnects += 1; conn.close }) { conn.request }
+    Invidious::PoolRetry.with_reconnect(-> { reconnects += 1; conn.close }) { conn.request }
 
     expect(reconnects).to eq(1)
   end
@@ -79,7 +79,7 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
 
     expect do
       # A reconnect that does not clear the failure, e.g. the peer is down.
-      Invidious::PoolRetry.with_reconnect(->{ nil }) { conn.request }
+      Invidious::PoolRetry.with_reconnect(-> { nil }) { conn.request }
     end.to raise_error(IO::EOFError)
 
     expect(conn.attempts).to eq(2)
@@ -89,7 +89,7 @@ Spectator.describe "Invidious::PoolRetry.with_reconnect" do
     reconnects = 0
 
     expect do
-      Invidious::PoolRetry.with_reconnect(->{ reconnects += 1; nil }) do
+      Invidious::PoolRetry.with_reconnect(-> { reconnects += 1; nil }) do
         raise AppError.new("Youtube API returned status code 500")
       end
     end.to raise_error(AppError)

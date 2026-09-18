@@ -22,7 +22,7 @@ struct YoutubeConnectionPool
       # peer while it sat idle. `close` drops that dead socket so the retry
       # opens a fresh one; taking another idle connection out of the pool
       # would not help, as it went stale during the same idle period.
-      response = Invidious::PoolRetry.with_reconnect(->{ conn.close }) do
+      response = Invidious::PoolRetry.with_reconnect(-> { conn.close }) do
         # Proxy needs to be reinstated every time we get a client from the pool
         configure_proxy(conn) if CONFIG.http_proxy
         yield conn
@@ -105,7 +105,7 @@ struct CompanionConnectionPool
       # See `YoutubeConnectionPool#client`: reconnect the connection we hold
       # rather than swapping in another idle one that is just as likely to
       # have been closed by the companion while idle.
-      response = Invidious::PoolRetry.with_reconnect(->{ wrapper.close }) do
+      response = Invidious::PoolRetry.with_reconnect(-> { wrapper.close }) do
         yield wrapper
       end
     rescue ex
