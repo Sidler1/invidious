@@ -264,6 +264,23 @@ class Config
     nil
   end
 
+  # Pure check for non-fatal misconfigurations; `load` prints each entry
+  # as a startup warning.
+  def self.runtime_warnings(config : Config) : Array(String)
+    warnings = [] of String
+
+    config.invidious_companion.each do |companion|
+      path = companion.private_url.path
+      if path.empty? || path == "/"
+        warnings << "'invidious_companion[].private_url' (#{companion.private_url}) has no path segment. " \
+                    "Invidious companion serves its API under its base_path (\"/companion\" by default), " \
+                    "so requests will fail with 404 unless the companion runs with SERVER_BASE_PATH=\"/\"."
+      end
+    end
+
+    warnings
+  end
+
   def self.load
     # Load config from file or YAML string env var
     env_config_file = "INVIDIOUS_CONFIG_FILE"
@@ -346,6 +363,10 @@ class Config
     if problem = runtime_error(config)
       puts "Config: #{problem}"
       exit(1)
+    end
+
+    runtime_warnings(config).each do |warning|
+      puts "Config: WARNING: #{warning}"
     end
 
     # HMAC_key is mandatory

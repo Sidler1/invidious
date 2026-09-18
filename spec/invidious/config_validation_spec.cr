@@ -74,3 +74,38 @@ Spectator.describe "Config.runtime_error" do
     expect(Config.runtime_error(config)).to be_nil
   end
 end
+
+Spectator.describe "Config.runtime_warnings" do
+  def example_config
+    Config.from_yaml(File.read("config/config.example.yml"))
+  end
+
+  def companion_config(private_url : String)
+    Config::CompanionConfig.from_yaml("private_url: #{private_url.inspect}")
+  end
+
+  it "returns no warnings for the example configuration" do
+    expect(Config.runtime_warnings(example_config)).to be_empty
+  end
+
+  it "warns when a companion private_url has no base path" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282")]
+    warnings = Config.runtime_warnings(config)
+    expect(warnings.size).to eq(1)
+    expect(warnings[0]).to contain("private_url")
+    expect(warnings[0]).to contain("base_path")
+  end
+
+  it "warns when a companion private_url has a bare root path" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282/")]
+    expect(Config.runtime_warnings(config).size).to eq(1)
+  end
+
+  it "does not warn when a companion private_url includes a base path" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282/companion")]
+    expect(Config.runtime_warnings(config)).to be_empty
+  end
+end
