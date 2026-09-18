@@ -89,3 +89,38 @@ Spectator.describe "Invidious::Jobs.apply_config" do
     expect(job.cfg.enable).to be_true
   end
 end
+Spectator.describe "Config.runtime_warnings, jobs section" do
+  def example_config
+    Config.from_yaml(File.read("config/config.example.yml"))
+  end
+
+  def config_disabling(yaml : String)
+    config = example_config
+    config.jobs = Invidious::Jobs::JobsConfig.from_yaml(yaml)
+    config
+  end
+
+  # The shipped example file enables every job, so it must stay silent.
+  it "says nothing about jobs for the example configuration" do
+    expect(Config.runtime_warnings(example_config)).to be_empty
+  end
+
+  # An operator upgrading into this change may have written `enable: false`
+  # years ago, when it was parsed and ignored. The job stops now, so startup
+  # has to say so.
+  it "warns once, naming every job the configuration disabled" do
+    config = config_disabling("clear_expired_items:\n  enable: false\nnotification:\n  enable: false\n")
+    warnings = Config.runtime_warnings(config)
+
+    expect(warnings.size).to eq(1)
+    expect(warnings[0]).to contain("clear_expired_items")
+    expect(warnings[0]).to contain("notification")
+  end
+
+  it "names the one disabled job when only one is disabled" do
+    warnings = Config.runtime_warnings(config_disabling("refresh_feeds:\n  enable: false\n"))
+
+    expect(warnings.size).to eq(1)
+    expect(warnings[0]).to contain("refresh_feeds")
+  end
+end
