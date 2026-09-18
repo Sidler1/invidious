@@ -71,6 +71,23 @@ module Invidious::CompanionProxy
     base + request_path.lchop("/companion")
   end
 
+  # Browser-facing URL for one caption track. `base` is the companion's
+  # `public_url` when one is configured (the companion serves
+  # `/api/v1/captions` itself) and `""` when Invidious serves the track;
+  # `check` is the signed token the companion requires, `nil` without one.
+  #
+  # `label` is YouTube-sourced free text and must be percent-encoded: a
+  # track named with an "&" or a "#" would otherwise cut the query short,
+  # and the companion compares the decoded value with the real track name,
+  # so that track answers 404. Invidious' own `/api/v1/captions` listing
+  # already encodes the same value. The caller still has to HTML-escape the
+  # result before putting it in an attribute.
+  def caption_track_url(base : String, video_id : String, label : String, check : String?) : String
+    url = "#{base}/api/v1/captions/#{video_id}?label=#{URI.encode_www_form(label)}"
+    url += "&check=#{check}" if check
+    url
+  end
+
   # Builds the browser-facing companion URL for a legacy stream/manifest
   # redirect: the original query minus any client-supplied `check`, plus a
   # freshly minted `check` token for `video_id`.
