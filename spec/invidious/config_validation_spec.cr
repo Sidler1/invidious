@@ -80,8 +80,10 @@ Spectator.describe "Config.runtime_warnings" do
     Config.from_yaml(File.read("config/config.example.yml"))
   end
 
-  def companion_config(private_url : String)
-    Config::CompanionConfig.from_yaml("private_url: #{private_url.inspect}")
+  def companion_config(private_url : String, builtin_proxy : Bool = false)
+    companion = Config::CompanionConfig.from_yaml("private_url: #{private_url.inspect}")
+    companion.builtin_proxy = builtin_proxy
+    companion
   end
 
   it "returns no warnings for the example configuration" do
@@ -107,5 +109,49 @@ Spectator.describe "Config.runtime_warnings" do
     config = example_config
     config.invidious_companion = [companion_config("http://localhost:8282/companion")]
     expect(Config.runtime_warnings(config)).to be_empty
+  end
+
+  # `_post_invidious_companion` concatenates `private_url.path` with the
+  # endpoint, so a trailing slash doubles it and only the player POST 404s;
+  # the `/companion` proxy rchops the same value and keeps working.
+  it "warns when a companion private_url path has a trailing slash" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282/companion/")]
+    warnings = Config.runtime_warnings(config)
+    expect(warnings.size).to eq(1)
+    expect(warnings[0]).to contain("trailing slash")
+  end
+
+  # Invidious serves its built-in proxy under a hardcoded "/companion", and
+  # the companion builds browser-facing URLs from its own base path, so the
+  # two have to be the same string.
+  it "warns when the built-in proxy is used with a base path other than /companion" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282/yt", builtin_proxy: true)]
+    warnings = Config.runtime_warnings(config)
+    expect(warnings.size).to eq(1)
+    expect(warnings[0]).to contain("/companion")
+  end
+
+  it "warns when the built-in proxy is used with no base path at all" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282", builtin_proxy: true)]
+    expect(Config.runtime_warnings(config).size).to eq(1)
+  end
+
+  it "does not warn when the built-in proxy is used with the /companion base path" do
+    config = example_config
+    config.invidious_companion = [companion_config("http://localhost:8282/companion", builtin_proxy: true)]
+    expect(Config.runtime_warnings(config)).to be_empty
+  end
+
+  it "reports one warning per misconfigured companion" do
+    config = example_config
+    config.invidious_companion = [
+      companion_config("http://localhost:8282/companion"),
+      companion_config("http://localhost:8283/companion/"),
+      companion_config("http://localhost:8284"),
+    ]
+    expect(Config.runtime_warnings(config).size).to eq(2)
   end
 end

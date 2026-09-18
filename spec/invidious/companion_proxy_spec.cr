@@ -1,6 +1,37 @@
 require "../spec_helper"
 
 Spectator.describe Invidious::CompanionProxy do
+  describe ".caption_track_url" do
+    # `caption.name` is free text that YouTube supplies. Left raw, a track
+    # named with an "&" cuts the query short: the companion then compares
+    # the truncated label against the real one and answers 404 for that
+    # track. Invidious' own API already encodes this same value.
+    it "percent-encodes a label that would otherwise break the query" do
+      url = described_class.caption_track_url("", "dQw4w9WgXcQ", "R&B / Soul", nil)
+
+      expect(url).to eq("/api/v1/captions/dQw4w9WgXcQ?label=R%26B+%2F+Soul")
+      expect(url).not_to contain("&B")
+    end
+
+    it "appends the companion check token after the label" do
+      url = described_class.caption_track_url("/companion", "dQw4w9WgXcQ", "English", "TOKEN")
+
+      expect(url).to eq("/companion/api/v1/captions/dQw4w9WgXcQ?label=English&check=TOKEN")
+    end
+
+    it "prefixes an external companion public_url" do
+      url = described_class.caption_track_url("http://c.example/companion", "dQw4w9WgXcQ", "English", "TOKEN")
+
+      expect(url).to eq("http://c.example/companion/api/v1/captions/dQw4w9WgXcQ?label=English&check=TOKEN")
+    end
+
+    it "omits the check when no companion is configured" do
+      url = described_class.caption_track_url("", "dQw4w9WgXcQ", "English", nil)
+
+      expect(url).to eq("/api/v1/captions/dQw4w9WgXcQ?label=English")
+    end
+  end
+
   describe ".request_headers" do
     it "forwards only allow-listed headers" do
       incoming = HTTP::Headers{

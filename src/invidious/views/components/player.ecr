@@ -1,5 +1,6 @@
 <%
     invidious_companion_check_id = invidious_companion_encrypt(video.id) if invidious_companion
+    captions_base = invidious_companion ? invidious_companion.public_url.to_s : ""
 %>
 <video style="outline:none;width:100%;background-color:#000" playsinline poster="<%= thumbnail %>"
     id="player" class="on-video_player video-js player-style-<%= params.player_style %>"
@@ -68,20 +69,14 @@
             <% end %>
         <% end %>
 
-        <% preferred_captions.each do |caption|
-            api_captions_url = "/api/v1/captions/"
-            api_captions_url = invidious_companion.public_url.to_s + api_captions_url if (invidious_companion)
-            api_captions_check_id = "&check=#{invidious_companion_check_id}"
+        <% # `caption.name` is YouTube-sourced and unsafe in both positions:
+           # percent-encoded into the query by `caption_track_url`, and
+           # HTML-escaped here before it reaches an attribute.
+           (preferred_captions + captions).each do |caption|
+            api_captions_url = Invidious::CompanionProxy.caption_track_url(
+                captions_base, video.id, caption.name, invidious_companion_check_id)
         %>
-            <track kind="captions" src="<%= api_captions_url %><%= video.id %>?label=<%= caption.name %><%= api_captions_check_id %>" label="<%= caption.name %>">
-        <% end %>
-
-        <% captions.each do |caption|
-            api_captions_url = "/api/v1/captions/"
-            api_captions_url = invidious_companion.public_url.to_s + api_captions_url if (invidious_companion)
-            api_captions_check_id = "&check=#{invidious_companion_check_id}"
-        %>
-            <track kind="captions" src="<%= api_captions_url %><%= video.id %>?label=<%= caption.name %><%= api_captions_check_id %>" label="<%= caption.name %>">
+            <track kind="captions" src="<%= HTML.escape(api_captions_url) %>" label="<%= HTML.escape(caption.name) %>">
         <% end %>
     <% end %>
 </video>
