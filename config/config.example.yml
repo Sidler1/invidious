@@ -513,32 +513,124 @@ feed_threads: 1
 ##
 disable_abusable_api: false
 
+##
+## Per-job switches for the background workers.
+##
+## Every job below is registered in src/invidious.cr and runs in its own
+## fiber. Setting 'enable: false' stops that job from being started.
+##
+## Note: these keys are GENERATED from the job class names (see the
+## 'macro finished' in src/invidious/jobs.cr, which turns
+## 'Invidious::Jobs::ClearExpiredItemsJob' into 'clear_expired_items').
+## Adding, renaming or removing a job changes this list, so keep the block
+## below in step with it - nothing in the source spells these names out.
+##
+## Note 2: five of these jobs ALSO have a top-level setting that decides
+## whether they are registered at all (named per job below). Both gates
+## apply: the top-level setting decides registration, and 'enable: false'
+## additionally disables. A job switched off by its top-level setting
+## cannot be switched back on here.
+##
 jobs:
-  ## Options for the database cleaning job
+  ## Deletes cached video rows older than 6 hours and expired nonces,
+  ## once an hour. Stands in for a cron job.
+  ## No top-level setting - this section is the only way to disable it.
+  ## Off means nothing prunes those tables and they grow without bound;
+  ## only turn it off if you handle retention yourself.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
   clear_expired_items:
-    ## Enable/Disable job
-    ##
-    ## Accepted values: true, false
-    ## Default: true
-    ##
     enable: true
 
-  ## Options for the channels updater job
+  ## Refreshes the list of other public Invidious instances used by the
+  ## "switch instance" button, by fetching api.invidious.io every 30
+  ## minutes.
+  ## No top-level setting - this section is the only way to disable it.
+  ## Off means the cross-instance redirect falls back to
+  ## redirect.invidious.io. Worth turning off on a private or internal
+  ## instance, which otherwise contacts a third party every half hour for
+  ## a feature its users never use.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
+  instance_list_refresh:
+    enable: true
+
+  ## DO NOT DISABLE unless you know exactly what you are giving up.
+  ##
+  ## Despite the name this is not an optional extra: it holds the
+  ## PostgreSQL LISTEN connection open and keeps the registry of connected
+  ## clients that /api/v1/auth/notifications (server-sent events) is
+  ## served from, and it runs the 'feed_needs_update' fallback that keeps
+  ## subscription feeds correct when user notifications are off.
+  ## Turning it off breaks that endpoint and leaves feeds stale, with
+  ## nothing in the log to explain either.
+  ## No top-level setting - this section is the only way to disable it.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
+  notification:
+    enable: true
+
+  ## Fills the "Popular" page: one query a minute, kept in memory.
+  ## Top-level setting: popular_enabled.
+  ## Off means the Popular page is empty.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
+  pull_popular_videos:
+    enable: true
+
+  ## Re-fetches every subscribed channel from YouTube so new uploads and
+  ## renamed channels are picked up, every 'channel_refresh_interval'.
+  ## The heaviest outbound job on a subscription-heavy instance.
+  ## Top-level setting: channel_threads (0 disables).
+  ## Off means subscriptions only pick up new videos via PubSubHub.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
   refresh_channels:
-    ## Enable/Disable job
-    ##
-    ## Accepted values: true, false
-    ## Default: true
-    ##
     enable: true
 
-  ## Options for the RSS feeds updater job
+  ## Rebuilds each user's subscription feed by refreshing their
+  ## materialized view. The heaviest database-write job: one view per user.
+  ## Top-level setting: feed_threads (0 disables).
+  ## Off means users' subscription pages go stale.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
   refresh_feeds:
-    ## Enable/Disable job
-    ##
-    ## Accepted values: true, false
-    ## Default: true
-    ##
+    enable: true
+
+  ## Recomputes the user counts behind /api/v1/stats every 10 minutes and
+  ## resets the playback tracker. Cheap.
+  ## Top-level setting: statistics_enabled (false by default, in which case
+  ## this job is not registered at all).
+  ## Off means /api/v1/stats stops being updated.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
+  statistics_refresh:
+    enable: true
+
+  ## Registers the instance with Google's PubSubHubbub so YouTube pushes a
+  ## webhook on a new upload instead of Invidious polling for it.
+  ## Top-level setting: use_pubsub_feeds (false by default, in which case
+  ## this job is not registered at all).
+  ## Off means new videos are only found by refresh_channels.
+  ##
+  ## Accepted values: true, false
+  ## Default: true
+  ##
+  subscribe_to_feeds:
     enable: true
 
 # -----------------------------

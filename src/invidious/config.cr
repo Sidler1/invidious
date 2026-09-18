@@ -275,7 +275,30 @@ class Config
       end
     end
 
+    if warning = disabled_jobs_warning(config)
+      warnings << warning
+    end
+
     warnings
+  end
+
+  # Names every background job the `jobs:` section switches off, or nil when
+  # it switches off none.
+  #
+  # Earlier releases parsed `jobs:` and never applied it, so an `enable:
+  # false` written years ago - possibly by someone who has since left - has
+  # been doing nothing, and the job it names has been running. Applying the
+  # setting is the fix, but on the instance that upgrades into it a job
+  # simply stops, with nothing to connect that to a config file nobody
+  # touched. One line at startup is what turns that into a visible change
+  # instead of a mystery.
+  private def self.disabled_jobs_warning(config : Config) : String?
+    disabled = Invidious::Jobs.disabled_job_names(config.jobs)
+    return nil if disabled.empty?
+
+    "the 'jobs:' section disables #{disabled.size} background job(s): #{disabled.join(", ")}. " \
+    "Until this release that setting was parsed but never applied, so those jobs ran anyway; " \
+    "they are now really disabled. Remove the matching 'enable: false' to bring one back."
   end
 
   # The single most useful thing to say about one companion's `private_url`
