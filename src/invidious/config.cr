@@ -270,15 +270,57 @@ class Config
     warnings = [] of String
 
     config.invidious_companion.each do |companion|
-      path = companion.private_url.path
-      if path.empty? || path == "/"
-        warnings << "'invidious_companion[].private_url' (#{companion.private_url}) has no path segment. " \
-                    "Invidious companion serves its API under its base_path (\"/companion\" by default), " \
-                    "so requests will fail with 404 unless the companion runs with SERVER_BASE_PATH=\"/\"."
+      if warning = companion_path_warning(companion)
+        warnings << warning
       end
     end
 
     warnings
+  end
+
+  # The single most useful thing to say about one companion's `private_url`
+  # path, or `nil` when it is fine. At most one per companion: these are
+  # three readings of the same field, and printing two of them at startup
+  # would only obscure which one to act on.
+  private def self.companion_path_warning(companion : CompanionConfig) : String?
+    url = companion.private_url
+    path = url.path
+
+    # Invidious serves the built-in proxy under a hardcoded "/companion"
+    # (see `Routing.register_companion_routes`), while the companion builds
+    # the URLs it hands back to the browser - DASH segment URLs, the
+    # /latest_version redirect target, the caption list - from its own
+    # SERVER_BASE_PATH. With the built-in proxy those URLs are resolved
+    # against the Invidious origin, so any other base path lands on a route
+    # Invidious does not have: a 404 per stream with nothing in the log to
+    # explain it. The two strings have to match exactly.
+    if companion.builtin_proxy && path != "/companion"
+      return "'invidious_companion[].private_url' (#{url}) does not use the \"/companion\" base path, " \
+             "but no 'public_url' is set, so Invidious proxies the companion under its own hardcoded " \
+             "\"/companion\" prefix. Run the companion with SERVER_BASE_PATH=\"/companion\", or set " \
+             "'public_url' so browsers reach it directly."
+    end
+
+    # `YoutubeAPI._post_invidious_companion` concatenates this path with the
+    # endpoint, so a trailing slash produces "//youtubei/v1/player" and that
+    # request alone 404s, on every video, while the `/companion` proxy
+    # (which rchops the same value) keeps working. The companion's own
+    # config rejects a base path with a trailing slash, so there is never a
+    # setup where one is correct here.
+    if path.ends_with?("/")
+      return "'invidious_companion[].private_url' (#{url}) has a trailing slash in its path. " \
+             "Invidious appends the endpoint to it, so the player request would go to a doubled " \
+             "slash and fail with 404. Drop it: use \"/companion\", or no path at all when the " \
+             "companion runs with SERVER_BASE_PATH=\"/\"."
+    end
+
+    if path.empty?
+      return "'invidious_companion[].private_url' (#{url}) has no path segment. " \
+             "Invidious companion serves its API under its base_path (\"/companion\" by default), " \
+             "so requests will fail with 404 unless the companion runs with SERVER_BASE_PATH=\"/\"."
+    end
+
+    nil
   end
 
   def self.load
